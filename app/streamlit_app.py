@@ -392,10 +392,10 @@ def render_attacker_section(factions):
         key="atk_weapons",
     )
 
+    _atk_default = atk_unit.max_models if atk_unit.max_models > 1 else 5
     total_models = st.number_input(
         "Figurines dans l'unité",
-        min_value=1, max_value=max(atk_unit.max_models, 1),
-        value=max(atk_unit.max_models, 1), key=f"atk_total_count_{atk_unit_name}",
+        min_value=1, value=_atk_default, key=f"atk_total_count_{atk_unit_name}",
     )
 
     weapon_dist = {}
@@ -414,24 +414,22 @@ def render_attacker_section(factions):
         weapon_dist[wname] = int(count)
         assigned += int(count)
 
-    # Compteur total
+    # Compteur total (indicatif uniquement)
     if selected_weapons:
         ok = assigned == int(total_models)
-        color = "#48bb78" if ok else "#fc8181"
+        color = "#7A9E7E" if ok else "#C47A5A"
         st.markdown(
-            f'<span style="color:{color};font-weight:bold">'
-            f'Figurines assignées : {assigned} / {int(total_models)}</span>',
+            f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:0.8rem;color:{color}">'
+            f'{assigned} / {int(total_models)} figurines assignées</span>',
             unsafe_allow_html=True,
         )
-        if not ok:
-            st.info("ℹ️ Le total assigné ne correspond pas au nombre de figurines — la simulation utilisera les valeurs telles quelles.")
 
     # --- Relances ---
     with st.expander("Relances"):
         hit_rr = REROLL_OPTIONS[st.selectbox("Relance touche", list(REROLL_OPTIONS.keys()), key="hit_rr")]
         wound_rr = REROLL_OPTIONS[st.selectbox("Relance blessure", list(REROLL_OPTIONS.keys()), key="wound_rr")]
 
-    # --- Leader attaché (attaquant) ---
+    # --- Leaders attachés (attaquant) ---
     atk_hit_modifier = 0
     atk_leader_loadout = []
 
@@ -440,50 +438,46 @@ def render_attacker_section(factions):
         if not char_units:
             st.caption("Aucune unité CHARACTER dans cette faction.")
         else:
-            attach_leader = st.checkbox("Attacher un leader", key="atk_attach_leader")
-            if attach_leader:
-                leader_name = st.selectbox(
-                    "Leader", list(char_units.keys()), key="atk_leader_name"
-                )
-                leader_unit = char_units[leader_name]
-                lm = leader_unit.primary_model()
-                if lm:
-                    st.markdown(unit_datacard_html(leader_unit, lm), unsafe_allow_html=True)
+            for slot_key, slot_label in [("leader", "Leader"), ("support", "Support (2e personnage)")]:
+                attach = st.checkbox(f"Attacher un {slot_label}", key=f"atk_attach_{slot_key}")
+                if attach:
+                    char_name = st.selectbox(
+                        slot_label, list(char_units.keys()), key=f"atk_{slot_key}_name"
+                    )
+                    char_unit = char_units[char_name]
+                    cm = char_unit.primary_model()
+                    if cm:
+                        st.markdown(unit_datacard_html(char_unit, cm), unsafe_allow_html=True)
 
-                # Vérification keywords (non bloquant)
-                unit_kws = set(k.upper() for k in atk_unit.keywords)
-                leader_kws = set(k.upper() for k in leader_unit.keywords)
-                if not unit_kws.intersection(leader_kws - {"CHARACTER"}):
-                    st.warning("⚠️ Aucun mot-clé commun entre le leader et l'unité — vérifiez les règles d'attachement.")
+                    unit_kws = set(k.upper() for k in atk_unit.keywords)
+                    char_kws = set(k.upper() for k in char_unit.keywords)
+                    if not unit_kws.intersection(char_kws - {"CHARACTER"}):
+                        st.warning("⚠️ Aucun mot-clé commun — vérifiez les règles d'attachement.")
 
-                # Armes du leader → groupes supplémentaires
-                leader_weapons = [w.name for w in leader_unit.weapons]
-                sel_leader_w = st.multiselect(
-                    "Armes du leader", leader_weapons,
-                    default=leader_weapons[:1] if leader_weapons else [],
-                    key="atk_leader_weapons",
-                )
-                for wname in sel_leader_w:
-                    w = leader_unit.get_weapon(wname)
-                    if w:
-                        st.markdown(weapon_datacard_html(w), unsafe_allow_html=True)
-                    atk_leader_loadout.append((leader_unit, wname, 1))
+                    char_weapons = [w.name for w in char_unit.weapons]
+                    sel_w = st.multiselect(
+                        f"Armes du {slot_label}", char_weapons,
+                        default=char_weapons[:1] if char_weapons else [],
+                        key=f"atk_{slot_key}_weapons",
+                    )
+                    for wname in sel_w:
+                        w = char_unit.get_weapon(wname)
+                        if w:
+                            st.markdown(weapon_datacard_html(w), unsafe_allow_html=True)
+                        atk_leader_loadout.append((char_unit, wname, 1))
 
-                # Abilities
-                st.markdown("**Abilities du leader**")
-                abilities = leader_unit.abilities
-                if abilities:
-                    for ab in abilities[:6]:
-                        with st.expander(ab["name"], expanded=False):
-                            st.caption(ab.get("description", ""))
-                else:
-                    st.caption("Aucune ability renseignée dans les données.")
+                    abilities = char_unit.abilities
+                    if abilities:
+                        st.markdown(f"**Abilities — {char_name}**")
+                        for ab in abilities[:6]:
+                            with st.expander(ab["name"], expanded=False):
+                                st.caption(ab.get("description", ""))
 
-                st.markdown("**Effets simulables**")
-                if st.checkbox("+1 à la touche pour toute l'unité", key="atk_hit_plus"):
-                    atk_hit_modifier += 1
-                if st.checkbox("-1 à la touche pour toute l'unité", key="atk_hit_minus"):
-                    atk_hit_modifier -= 1
+                    st.markdown("**Effets simulables**")
+                    if st.checkbox(f"+1 touche ({slot_label})", key=f"atk_{slot_key}_hit_plus"):
+                        atk_hit_modifier += 1
+                    if st.checkbox(f"-1 touche ({slot_label})", key=f"atk_{slot_key}_hit_minus"):
+                        atk_hit_modifier -= 1
 
     return {
         "unit": atk_unit,
