@@ -69,8 +69,8 @@ st.markdown("""
     font-family: 'Cinzel', Georgia, serif !important;
 }
 .stButton > button[kind="primary"] {
-    background-color: #1a1a2e !important;
-    color: #F5F0E8 !important;
+    background-color: #C47A5A !important;
+    color: #1a1a2e !important;
     border: none !important;
     font-size: 1rem !important;
     font-weight: 600 !important;
@@ -78,7 +78,8 @@ st.markdown("""
     border-radius: 4px !important;
 }
 .stButton > button[kind="primary"]:hover {
-    background-color: #C47A5A !important;
+    background-color: #1a1a2e !important;
+    color: #F5F0E8 !important;
 }
 
 /* Metriques */
@@ -188,6 +189,21 @@ def get_character_units(faction_id):
 # ---------------------------------------------------------------------------
 # Helpers — datacard HTML
 # ---------------------------------------------------------------------------
+
+_S_SECTION_H = (
+    "font-family:'Cinzel',Georgia,serif;"
+    "font-weight:600;font-size:1.15rem;letter-spacing:0.08em;"
+    "color:#1a1a2e;border-bottom:1.5px solid #1a1a2e;"
+    "padding-bottom:6px;margin-bottom:12px;"
+    "display:flex;align-items:center;gap:8px;"
+)
+
+def section_header(icon_name: str, label: str):
+    ico = icon_img(icon_name, size=26)
+    st.markdown(
+        f'<div style="{_S_SECTION_H}">{ico}{label}</div>',
+        unsafe_allow_html=True,
+    )
 
 def _filter_abilities(abilities: list) -> list:
     """Exclut les abilities génériques non pertinentes pour la simulation."""
@@ -388,7 +404,7 @@ def make_cumulative_chart(results, weapon_name):
 # ---------------------------------------------------------------------------
 
 def render_attacker_section(factions):
-    st.subheader("⚔️ Attaquant")
+    section_header("attacker", "Attaquant")
 
     atk_faction_name = st.selectbox("Faction", list(factions.keys()), key="atk_faction")
     atk_faction_id = factions[atk_faction_name]
@@ -511,7 +527,7 @@ def render_attacker_section(factions):
 # ---------------------------------------------------------------------------
 
 def render_defender_section(factions):
-    st.subheader("🛡 Défenseur")
+    section_header("defender", "Défenseur")
 
     def_faction_name = st.selectbox("Faction", list(factions.keys()), key="def_faction")
     def_faction_id = factions[def_faction_name]
@@ -638,7 +654,7 @@ with col_def:
     def_cfg = render_defender_section(factions)
 
 with col_ctx:
-    st.subheader("🎲 Contexte")
+    section_header("context", "Contexte")
     combat_type = st.radio("Type de combat", ["Distance", "Mêlée"], horizontal=True)
     within_half = st.checkbox("Dans la moitié de la portée (Rapid Fire, Melta)")
     target_cover = st.checkbox("Cible en couverture")
