@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Rounded square container -->
+  <rect x="3" y="3" width="58" height="58" rx="11" fill="#7A9EC4" stroke="#1a1a2e" stroke-width="2.5"/>
+  <!-- Outer ring -->
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#1a1a2e" stroke-width="1.5"/>
+  <!-- Inner ring -->
+  <circle cx="32" cy="32" r="7" fill="none" stroke="#1a1a2e" stroke-width="1.5"/>
+  <!-- Crosshair lines (clipped to outer ring) -->
+  <line x1="32" y1="11" x2="32" y2="25" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="32" y1="39" x2="32" y2="53" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="11" y1="32" x2="25" y2="32" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="39" y1="32" x2="53" y2="32" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Center dot -->
+  <circle cx="32" cy="32" r="3" fill="#1a1a2e"/>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Rounded triangle -->
+  <path d="M32,5 C33.5,5 36.5,9.5 54,51 C55.5,55 53,61 48,61 L16,61 C11,61 8.5,55 10,51 C27.5,9.5 30.5,5 32,5 Z"
+        fill="#C4A87A" stroke="#1a1a2e" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- Claw marks — 3 straight lines fanning from top center (↙ ↓ ↘) -->
+  <line x1="32" y1="19" x2="16" y2="54" stroke="#1a1a2e" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="32" y1="17" x2="32" y2="56" stroke="#1a1a2e" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="32" y1="19" x2="48" y2="54" stroke="#1a1a2e" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

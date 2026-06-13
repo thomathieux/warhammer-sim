@@ -5,6 +5,7 @@ Powered by Wahapedia
 """
 
 import sys
+import base64
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -33,62 +34,136 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-.datacard {
-    background: #1a1f2e;
-    border: 1px solid #2d3748;
-    border-radius: 8px;
-    padding: 10px 14px;
-    margin-bottom: 8px;
-    font-size: 0.85rem;
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lora:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* Titres : Cinzel (inscription, lisible, field manual) */
+.stApp h1, .stApp h2, .stApp h3, .stApp h4 {
+    font-family: 'Cinzel', Georgia, serif !important;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: #1a1a2e;
 }
-.datacard-title {
-    font-weight: bold;
-    font-size: 0.95rem;
-    color: #e2e8f0;
-    margin-bottom: 6px;
+
+/* Corps de texte : Lora (serif lisible, elegante) */
+.stApp p,
+.stApp label,
+.stApp .stMarkdown p,
+.stApp .stMarkdown li,
+.stApp .stMarkdown td,
+.stApp .stSelectbox label,
+.stApp .stMultiSelect label,
+.stApp .stNumberInput label,
+.stApp .stCheckbox label,
+.stApp .stRadio label,
+.stApp .stCaption,
+.stApp .stText,
+.stApp input,
+.stApp textarea {
+    font-family: 'Lora', Georgia, serif !important;
+    font-size: 15px !important;
+    color: #1a1a2e;
 }
-.stat-row {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
+
+/* Boutons */
+.stApp button {
+    font-family: 'Cinzel', Georgia, serif !important;
 }
-.stat-box {
-    background: #2d3748;
-    border-radius: 4px;
-    padding: 4px 8px;
-    text-align: center;
-    min-width: 42px;
+.stButton > button[kind="primary"] {
+    background-color: #1a1a2e !important;
+    color: #F5F0E8 !important;
+    border: none !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.12em !important;
+    border-radius: 4px !important;
 }
-.stat-label {
-    font-size: 0.65rem;
-    color: #a0aec0;
-    text-transform: uppercase;
+.stButton > button[kind="primary"]:hover {
+    background-color: #C47A5A !important;
 }
-.stat-value {
-    font-size: 1.05rem;
-    font-weight: bold;
-    color: #f6e05e;
+
+/* Metriques */
+[data-testid="stMetricValue"] {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 1.4rem !important;
+    color: #C47A5A !important;
 }
-.kw-chip {
-    display: inline-block;
-    background: #2c5282;
-    color: #bee3f8;
-    border-radius: 3px;
-    padding: 1px 6px;
-    font-size: 0.7rem;
-    margin: 2px 2px 0 0;
+[data-testid="stMetricLabel"] {
+    font-family: 'Cinzel', serif !important;
+    font-size: 0.68rem !important;
+    letter-spacing: 0.08em;
+    color: #5a5a7a !important;
 }
-.warn-chip {
-    display: inline-block;
-    background: #744210;
-    color: #fbd38d;
-    border-radius: 3px;
-    padding: 1px 6px;
-    font-size: 0.7rem;
-    margin: 2px 2px 0 0;
+
+/* Separateurs */
+hr { border-color: #1a1a2e; opacity: 0.15; }
+
+/* Expanders */
+[data-testid="stExpander"] {
+    border: 1px solid #c8bfb0 !important;
+    border-radius: 4px !important;
+    background: #FAF7F2 !important;
 }
 </style>
 """, unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# Icônes SVG
+# ---------------------------------------------------------------------------
+
+_ICONS_DIR = Path(__file__).parent / "assets" / "icons"
+_icon_cache: dict[str, str] = {}
+
+def _icon_b64(name: str) -> str:
+    if name not in _icon_cache:
+        p = _ICONS_DIR / f"{name}.svg"
+        if p.exists():
+            _icon_cache[name] = base64.b64encode(p.read_bytes()).decode()
+        else:
+            _icon_cache[name] = ""
+    return _icon_cache[name]
+
+def icon_img(name: str, size: int = 24) -> str:
+    b64 = _icon_b64(name)
+    if not b64:
+        return ""
+    return (
+        f'<img src="data:image/svg+xml;base64,{b64}" '
+        f'width="{size}" height="{size}" style="vertical-align:middle;margin-right:6px">'
+    )
+
+def get_unit_icon(unit) -> str:
+    kws = {k.upper() for k in unit.keywords}
+    if "CHARACTER" in kws:
+        return "commander"
+    if "MONSTER" in kws or "BEAST" in kws:
+        return "creature"
+    if "VEHICLE" in kws:
+        return "vehicle"
+    if "GRAVIS" in kws or "TERMINATOR" in kws:
+        return "heavy"
+    return "infantry"
+
+def get_weapon_icon(weapon) -> str:
+    name_l = weapon.name.lower()
+    kw = weapon.keywords
+    if weapon.range.lower() == "melee":
+        return "blade"
+    if getattr(kw, "torrent", False) or "flame" in name_l or "flamer" in name_l:
+        return "flame"
+    if getattr(kw, "blast", False) or "blast" in name_l:
+        return "blast"
+    if "plasma" in name_l:
+        return "plasma"
+    cannon_words = ("cannon", "lascannon", "autocannon", "railgun",
+                    "missile", "mortar", "demolisher", "volcano")
+    if any(w in name_l for w in cannon_words):
+        return "cannon"
+    try:
+        if int(str(weapon.strength)) >= 8:
+            return "cannon"
+    except (ValueError, TypeError):
+        pass
+    return "bolter"
 
 # ---------------------------------------------------------------------------
 # Cache données Wahapedia
@@ -114,9 +189,26 @@ def get_character_units(faction_id):
 # Helpers — datacard HTML
 # ---------------------------------------------------------------------------
 
+_S_CARD  = "background:#FAF7F2;border:1.5px solid #1a1a2e;border-radius:6px;padding:12px 16px;margin-bottom:8px;"
+_S_TITLE = "font-family:'Cinzel',Georgia,serif;font-weight:600;font-size:0.95rem;letter-spacing:0.04em;color:#1a1a2e;margin-bottom:10px;display:flex;align-items:center;gap:8px;"
+_S_ROW   = "display:flex;flex-direction:row;gap:8px;flex-wrap:wrap;margin-bottom:8px;"
+_S_BOX   = "display:inline-block;background:#F0EBE0;border:1px solid #c8bfb0;border-radius:3px;padding:5px 12px;text-align:center;min-width:48px;"
+_S_LBL   = "display:block;font-family:'JetBrains Mono',monospace;font-size:0.58rem;color:#6a6a8a;text-transform:uppercase;letter-spacing:0.1em;"
+_S_VAL   = "display:block;font-family:'JetBrains Mono',monospace;font-size:1.1rem;font-weight:500;color:#1a1a2e;line-height:1.3;"
+_S_KW    = "display:inline-block;background:#E8F0EC;color:#1a4030;border:1px solid #7A9E7E;border-radius:2px;padding:2px 7px;font-size:0.7rem;margin:2px 3px 0 0;font-family:'JetBrains Mono',monospace;"
+_S_WARN  = "display:inline-block;background:#F5EDE4;color:#6a2a10;border:1px solid #C47A5A;border-radius:2px;padding:2px 7px;font-size:0.7rem;margin:2px 3px 0 0;font-family:'JetBrains Mono',monospace;"
+
 def _kw_chip(text, warn=False):
-    cls = "warn-chip" if warn else "kw-chip"
-    return f'<span class="{cls}">{text}</span>'
+    s = _S_WARN if warn else _S_KW
+    return f'<span style="{s}">{text}</span>'
+
+def _stat(label, value):
+    return (
+        f'<div style="{_S_BOX}">'
+        f'<span style="{_S_LBL}">{label}</span>'
+        f'<span style="{_S_VAL}">{value}</span>'
+        f'</div>'
+    )
 
 def unit_datacard_html(unit, model=None) -> str:
     if model is None:
@@ -126,18 +218,21 @@ def unit_datacard_html(unit, model=None) -> str:
 
     inv = f"{model.invulnerable_save}+" if model.invulnerable_save else "—"
     kw_html = " ".join(_kw_chip(k) for k in unit.keywords[:8])
+    ico = icon_img(get_unit_icon(unit), size=28)
 
-    return f"""
-<div class="datacard">
-  <div class="datacard-title">🛡 {unit.name}</div>
-  <div class="stat-row">
-    <div class="stat-box"><div class="stat-label">E</div><div class="stat-value">{model.toughness}</div></div>
-    <div class="stat-box"><div class="stat-label">SV</div><div class="stat-value">{model.save}+</div></div>
-    <div class="stat-box"><div class="stat-label">Inv</div><div class="stat-value">{inv}</div></div>
-    <div class="stat-box"><div class="stat-label">PV</div><div class="stat-value">{model.wounds}</div></div>
-  </div>
-  <div style="margin-top:6px">{kw_html}</div>
-</div>"""
+    stats = (
+        _stat("E", model.toughness)
+        + _stat("SV", f"{model.save}+")
+        + _stat("Inv", inv)
+        + _stat("PV", model.wounds)
+    )
+    return (
+        f'<div style="{_S_CARD}">'
+        f'<div style="{_S_TITLE}">{ico}{unit.name}</div>'
+        f'<div style="{_S_ROW}">{stats}</div>'
+        f'<div style="margin-top:4px">{kw_html}</div>'
+        f'</div>'
+    )
 
 def weapon_datacard_html(weapon) -> str:
     kw = weapon.keywords
@@ -161,20 +256,24 @@ def weapon_datacard_html(weapon) -> str:
         chips.append(_kw_chip(u, warn=True))
     kw_html = " ".join(chips)
     rng = weapon.range if weapon.range.lower() != "melee" else "Mêlée"
+    ico = icon_img(get_weapon_icon(weapon), size=24)
 
-    return f"""
-<div class="datacard">
-  <div class="datacard-title">🔫 {weapon.name}</div>
-  <div class="stat-row">
-    <div class="stat-box"><div class="stat-label">Portée</div><div class="stat-value">{rng}</div></div>
-    <div class="stat-box"><div class="stat-label">A</div><div class="stat-value">{weapon.attacks}</div></div>
-    <div class="stat-box"><div class="stat-label">CC/CT</div><div class="stat-value">{weapon.skill}+</div></div>
-    <div class="stat-box"><div class="stat-label">F</div><div class="stat-value">{weapon.strength}</div></div>
-    <div class="stat-box"><div class="stat-label">PA</div><div class="stat-value">{weapon.ap}</div></div>
-    <div class="stat-box"><div class="stat-label">D</div><div class="stat-value">{weapon.damage}</div></div>
-  </div>
-  {"<div style='margin-top:6px'>" + kw_html + "</div>" if kw_html else ""}
-</div>"""
+    stats = (
+        _stat("Portée", rng)
+        + _stat("A", weapon.attacks)
+        + _stat("CC/CT", f"{weapon.skill}+")
+        + _stat("F", weapon.strength)
+        + _stat("PA", weapon.ap)
+        + _stat("D", weapon.damage)
+    )
+    kw_block = f'<div style="margin-top:4px">{kw_html}</div>' if kw_html else ""
+    return (
+        f'<div style="{_S_CARD}">'
+        f'<div style="{_S_TITLE}">{ico}{weapon.name}</div>'
+        f'<div style="{_S_ROW}">{stats}</div>'
+        f'{kw_block}'
+        f'</div>'
+    )
 
 # ---------------------------------------------------------------------------
 # Helpers — graphiques
@@ -186,6 +285,28 @@ REROLL_OPTIONS = {
     "Relancer les échecs": RerollType.FAILED,
 }
 
+# Palette DA pour les graphiques
+_DA_BG       = "#F5F0E8"
+_DA_BG2      = "#FAF7F2"
+_DA_INK      = "#1a1a2e"
+_DA_GRID     = "#D8D0C0"
+_DA_TERRACOTTA = "#C47A5A"
+_DA_BLUE     = "#7A9EC4"
+_DA_GREEN    = "#7A9E7E"
+
+_CHART_BASE = dict(
+    plot_bgcolor=_DA_BG2,
+    paper_bgcolor=_DA_BG,
+    font=dict(family="Cormorant Garamond, Georgia, serif", color=_DA_INK, size=13),
+    title_font=dict(family="Cormorant Garamond, Georgia, serif", size=15, color=_DA_INK),
+    margin=dict(t=40, l=40, r=20, b=40),
+)
+
+def _apply_grid(fig):
+    fig.update_xaxes(gridcolor=_DA_GRID, linecolor=_DA_INK, zerolinecolor=_DA_GRID)
+    fig.update_yaxes(gridcolor=_DA_GRID, linecolor=_DA_INK, zerolinecolor=_DA_GRID)
+    return fig
+
 def make_damage_histogram(results, weapon_name):
     damages = [r.allocation.damage_allocated for r in results]
     if not damages:
@@ -194,12 +315,12 @@ def make_damage_histogram(results, weapon_name):
     fig = px.histogram(
         x=damages, nbins=nbins,
         labels={"x": "Dégâts alloués", "y": "Fréquence"},
-        title=f"Distribution dégâts — {weapon_name}",
-        color_discrete_sequence=["#e63946"],
+        title="Distribution des dégâts",
+        color_discrete_sequence=[_DA_TERRACOTTA],
     )
-    fig.update_layout(showlegend=False, plot_bgcolor="#0e1117",
-                      paper_bgcolor="#0e1117", font_color="#fafafa", bargap=0.05)
-    return fig
+    fig.update_traces(marker_line_color=_DA_INK, marker_line_width=0.8)
+    fig.update_layout(showlegend=False, bargap=0.06, **_CHART_BASE)
+    return _apply_grid(fig)
 
 def make_kill_chart(results, weapon_name, max_models):
     from collections import Counter
@@ -209,17 +330,20 @@ def make_kill_chart(results, weapon_name, max_models):
     x = list(range(0, max_models + 1))
     y = [counts.get(k, 0) / n * 100 for k in x]
     fig = go.Figure(go.Bar(
-        x=x, y=y, marker_color="#457b9d",
+        x=x, y=y,
+        marker_color=_DA_BLUE,
+        marker_line_color=_DA_INK,
+        marker_line_width=0.8,
         text=[f"{v:.1f}%" for v in y], textposition="outside",
+        textfont=dict(family="JetBrains Mono, monospace", size=11, color=_DA_INK),
     ))
     fig.update_layout(
-        title=f"P(kills ≥ N) — {weapon_name}",
+        title="Figurines éliminées",
         xaxis_title="Figurines tuées", yaxis_title="Probabilité (%)",
-        yaxis_range=[0, max(y) * 1.2 + 1] if max(y) > 0 else [0, 10],
-        plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
-        font_color="#fafafa", showlegend=False,
+        yaxis_range=[0, max(y) * 1.25 + 1] if max(y) > 0 else [0, 10],
+        showlegend=False, **_CHART_BASE,
     )
-    return fig
+    return _apply_grid(fig)
 
 def make_cumulative_chart(results, weapon_name):
     damages = sorted([r.allocation.damage_allocated for r in results])
@@ -228,16 +352,18 @@ def make_cumulative_chart(results, weapon_name):
     for v in range(0, max(damages) + 2):
         x.append(v)
         y.append(sum(1 for d in damages if d >= v) / n * 100)
-    fig = go.Figure(go.Scatter(x=x, y=y, mode="lines", fill="tozeroy",
-                               line=dict(color="#48bb78", width=2)))
+    fig = go.Figure(go.Scatter(
+        x=x, y=y, mode="lines", fill="tozeroy",
+        line=dict(color=_DA_GREEN, width=2.5),
+        fillcolor=f"rgba(122,158,126,0.18)",
+    ))
     fig.update_layout(
-        title=f"P(dégâts ≥ X) — {weapon_name}",
+        title="P(dégâts ≥ X)",
         xaxis_title="Dégâts", yaxis_title="Probabilité (%)",
         yaxis_range=[0, 105],
-        plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
-        font_color="#fafafa", showlegend=False,
+        showlegend=False, **_CHART_BASE,
     )
-    return fig
+    return _apply_grid(fig)
 
 # ---------------------------------------------------------------------------
 # Section attaquant
@@ -476,8 +602,18 @@ def render_defender_section(factions):
 # Interface principale
 # ---------------------------------------------------------------------------
 
-st.title("⚔️ Warhammer 40,000 — Simulateur de combat")
-st.caption("Powered by Wahapedia · wahapedia.ru")
+st.markdown(
+    '<h1 style="font-family:\'Cinzel\',Georgia,serif;'
+    'font-size:2rem;font-weight:700;letter-spacing:0.08em;'
+    'border-bottom:2px solid #1a1a2e;padding-bottom:8px;margin-bottom:4px">'
+    'Warhammer 40,000 — Simulateur de combat</h1>',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<p style="font-size:0.8rem;letter-spacing:0.12em;color:#8a8a9a;margin-top:0">'
+    'POWERED BY WAHAPEDIA · wahapedia.ru</p>',
+    unsafe_allow_html=True,
+)
 
 factions = get_factions()
 
@@ -584,7 +720,15 @@ if simulate_btn:
         agg = StatsAggregator(results).aggregate()
         alloc = agg["allocation"]
 
-        st.subheader(f"🔫 {weapon_name}")
+        # Trouver l'arme pour l'icône
+        _w = atk_cfg["unit"].get_weapon(weapon_name)
+        _ico_name = get_weapon_icon(_w) if _w else "bolter"
+        _ico_html = icon_img(_ico_name, size=28)
+        st.markdown(
+            f'<h3 style="display:flex;align-items:center;gap:8px">'
+            f'{_ico_html}{weapon_name}</h3>',
+            unsafe_allow_html=True,
+        )
 
         initial_count = def_cfg["model_count"]
         destruction_rate = sum(
@@ -636,4 +780,9 @@ if simulate_btn:
                 st.write(f"Ratées : {save['saves_failed_mean']:.2f}")
 
     st.divider()
-    st.caption("Powered by Wahapedia · wahapedia.ru · Données utilisées avec attribution")
+    st.markdown(
+        '<p style="font-size:0.72rem;letter-spacing:0.1em;color:#8a8a9a;text-align:center">'
+        'POWERED BY WAHAPEDIA · wahapedia.ru &nbsp;·&nbsp; '
+        'Warhammer 40,000 © Games Workshop Ltd — fan project, non affilié</p>',
+        unsafe_allow_html=True,
+    )

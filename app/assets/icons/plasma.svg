@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Rounded square container -->
+  <rect x="3" y="3" width="58" height="58" rx="11" fill="#C4A87A" stroke="#1a1a2e" stroke-width="2.5"/>
+  <!-- Lightning bolt Z-shape -->
+  <polygon points="40,10 24,33 35,33 24,54 44,31 33,31 40,10"
+           fill="#1a1a2e" stroke="#1a1a2e" stroke-width="1" stroke-linejoin="round"/>
+</svg>
