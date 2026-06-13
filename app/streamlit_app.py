@@ -269,7 +269,7 @@ def render_attacker_section(factions):
     total_models = st.number_input(
         "Figurines dans l'unité",
         min_value=1, max_value=max(atk_unit.max_models, 1),
-        value=max(atk_unit.max_models, 1), key="atk_total_count",
+        value=max(atk_unit.max_models, 1), key=f"atk_total_count_{atk_unit_name}",
     )
 
     weapon_dist = {}
@@ -388,7 +388,7 @@ def render_defender_section(factions):
     def_model_count = st.number_input(
         "Nombre de figurines",
         min_value=1, max_value=max(def_unit.max_models, 1),
-        value=max(def_unit.max_models, 1), key="def_count",
+        value=max(def_unit.max_models, 1), key=f"def_count_{def_unit_name}",
     )
 
     # --- Leader attaché (défenseur) ---
@@ -586,11 +586,20 @@ if simulate_btn:
 
         st.subheader(f"🔫 {weapon_name}")
 
-        m1, m2, m3, m4 = st.columns(4)
+        initial_count = def_cfg["model_count"]
+        destruction_rate = sum(
+            1 for r in results if r.allocation.models_killed >= initial_count
+        ) / len(results)
+        models_remaining_mean = max(0, initial_count - alloc["models_killed_mean"])
+
+        m1, m2, m3, m4, m5, m6 = st.columns(6)
         m1.metric("Dégâts moyens", f"{alloc['damage_allocated_mean']:.2f}")
         m2.metric("Figurines tuées (moy.)", f"{alloc['models_killed_mean']:.2f}")
-        m3.metric("FNP ignorés", f"{alloc['fnp_ignored_damage_mean']:.2f}")
-        m4.metric("Spillover perdu", f"{alloc['spillover_damage_mean']:.2f}")
+        m3.metric("Figurines restantes (moy.)", f"{models_remaining_mean:.2f}")
+        m4.metric("Taux de destruction", f"{destruction_rate*100:.1f}%",
+                  help="Probabilité d'éliminer toute l'unité en un round")
+        m5.metric("FNP ignorés", f"{alloc['fnp_ignored_damage_mean']:.2f}")
+        m6.metric("Spillover perdu", f"{alloc['spillover_damage_mean']:.2f}")
 
         if alloc.get("leader_kill_rate", 0) > 0:
             st.info(f"Taux de mort du leader : {alloc['leader_kill_rate']*100:.1f}%")
