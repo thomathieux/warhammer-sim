@@ -189,6 +189,24 @@ def get_character_units(faction_id):
 # Helpers — datacard HTML
 # ---------------------------------------------------------------------------
 
+def _filter_abilities(abilities: list) -> list:
+    """Exclut les abilities génériques non pertinentes pour la simulation."""
+    result = []
+    for ab in abilities:
+        name = ab.get("name", "").strip().upper()
+        desc = ab.get("description", "")
+        # Règle générique LEADER (texte universel sur les unités attachées)
+        if name == "LEADER":
+            continue
+        # Abilities de faction (texte commençant par "If your Army Faction is")
+        if desc.lstrip().startswith("If your Army Faction is"):
+            continue
+        # Abilities avec HTML brut de Wahapedia (balises de mise en forme)
+        if "<span" in desc or "<div" in desc:
+            continue
+        result.append(ab)
+    return result
+
 _S_CARD  = "background:#FAF7F2;border:1.5px solid #1a1a2e;border-radius:6px;padding:12px 16px;margin-bottom:8px;"
 _S_TITLE = "font-family:'Cinzel',Georgia,serif;font-weight:600;font-size:0.95rem;letter-spacing:0.04em;color:#1a1a2e;margin-bottom:10px;display:flex;align-items:center;gap:8px;"
 _S_ROW   = "display:flex;flex-direction:row;gap:8px;flex-wrap:wrap;margin-bottom:8px;"
@@ -466,7 +484,7 @@ def render_attacker_section(factions):
                             st.markdown(weapon_datacard_html(w), unsafe_allow_html=True)
                         atk_leader_loadout.append((char_unit, wname, 1))
 
-                    abilities = char_unit.abilities
+                    abilities = _filter_abilities(char_unit.abilities)
                     if abilities:
                         st.markdown(f"**Abilities — {char_name}**")
                         for ab in abilities[:6]:
@@ -545,7 +563,7 @@ def render_defender_section(factions):
                 if not unit_kws.intersection(leader_kws - {"CHARACTER"}):
                     st.warning("⚠️ Aucun mot-clé commun — vérifiez les règles d'attachement.")
 
-                abilities = leader_unit.abilities
+                abilities = _filter_abilities(leader_unit.abilities)
                 if abilities:
                     st.markdown("**Abilities du leader**")
                     for ab in abilities[:6]:
