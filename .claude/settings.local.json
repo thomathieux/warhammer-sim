@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "WebSearch",
-      "WebFetch(domain:wahapedia.ru)",
-      "WebFetch(domain:www.goonhammer.com)"
-    ]
-  }
-}
