@@ -64,12 +64,15 @@ class HitPhase(Phase):
 
             # --------------------------------------------------
             # 2. Calcul du modificateur connu (anticipé)
+            #    defender.hit_modifier : malus de l'unité cible (ex: Chronomancer)
+            #    attacker.hit_modifier : bonus de l'unité attaquante (leader ability)
             # --------------------------------------------------
             modifier = 0
             if defender:
-                modifier = defender.hit_modifier
+                modifier += defender.hit_modifier
+            modifier += attacker.hit_modifier
 
-            # Cap V10 ±1
+            # Cap V10/V11 ±1
             modifier = max(-1, min(1, modifier))
 
             # --------------------------------------------------

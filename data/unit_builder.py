@@ -155,6 +155,7 @@ def build_weapon_groups(
     context: Optional[CombatContext] = None,
     hit_reroll: RerollType = RerollType.NONE,
     wound_reroll: RerollType = RerollType.NONE,
+    hit_modifier: int = 0,
 ) -> List[AttackingUnit]:
     """
     Construit un AttackingUnit par groupe d'armes d'un loadout explicite.
@@ -225,6 +226,7 @@ def build_weapon_groups(
             rapid_fire=kw.rapid_fire,
             ignores_cover=kw.ignores_cover,
             twin_linked=kw.twin_linked,
+            hit_modifier=hit_modifier,
             hit_reroll=hit_reroll,
             wound_reroll=effective_wound_reroll,
             weapon_name=weapon.name,
@@ -236,6 +238,12 @@ def build_weapon_groups(
 def build_defending_unit(
     unit: WahapediaUnit,
     model_count: Optional[int] = None,
+    leader_model: Optional[DefendingModel] = None,
+    support_model: Optional[DefendingModel] = None,
+    hit_modifier: int = 0,
+    wound_modifier: int = 0,
+    damage_reduction: int = 0,
+    fnp: Optional[int] = None,
 ) -> DefendingUnit:
     """
     Construit un DefendingUnit à partir d'une unité Wahapedia.
@@ -253,13 +261,27 @@ def build_defending_unit(
 
     count = model_count if model_count is not None else unit.max_models
 
+    # FNP : si fourni en paramètre, prendre le meilleur (valeur la plus basse = meilleure)
+    effective_fnp = model_stats.invulnerable_save  # placeholder — fnp est sur DefendingModel
+    base_fnp = None  # Wahapedia ne fournit pas de FNP dans les CSV actuels
+    if fnp is not None:
+        effective_fnp = fnp if base_fnp is None else min(fnp, base_fnp)
+    else:
+        effective_fnp = base_fnp
+
     return DefendingUnit(
         model=DefendingModel(
             toughness=model_stats.toughness,
             save=model_stats.save,
             wounds=model_stats.wounds,
             invulnerable_save=model_stats.invulnerable_save,
+            fnp=effective_fnp,
         ),
         model_count=count,
+        leader_model=leader_model,
+        support_model=support_model,
+        hit_modifier=hit_modifier,
+        wound_modifier=wound_modifier,
+        damage_reduction=damage_reduction,
         keywords=unit.keywords,
     )

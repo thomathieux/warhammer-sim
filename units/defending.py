@@ -13,6 +13,7 @@ class DefendingUnit:
         defensive_rules: Optional[List] = None,
         damage_reduction: int = 0,
         hit_modifier: int = 0,
+        wound_modifier: int = 0,
         stealth: bool = False,
         wound_minus_one_if_weaker: bool = False,
         keywords: Optional[List[str]] = None,
@@ -61,6 +62,7 @@ class DefendingUnit:
         self.keywords = [k.upper() for k in (keywords or [])]
         self.damage_reduction = damage_reduction
         self.hit_modifier = hit_modifier
+        self.wound_modifier = wound_modifier
         self.wound_minus_one_if_weaker = wound_minus_one_if_weaker
         self.stealth = stealth
 

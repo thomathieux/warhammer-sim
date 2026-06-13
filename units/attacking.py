@@ -27,6 +27,8 @@ class AttackingUnit:
         rapid_fire: int = 0,
         # --- règles de sauvegarde ---
         ignores_cover: bool = False,
+        # --- modificateurs d'aura (leader abilities) ---
+        hit_modifier: int = 0,
         # --- relances ---
         hit_reroll: RerollType = RerollType.NONE,
         wound_reroll: RerollType = RerollType.NONE,
@@ -55,6 +57,7 @@ class AttackingUnit:
 
         self.ignores_cover = ignores_cover
 
+        self.hit_modifier = hit_modifier
         self.hit_reroll = hit_reroll
         self.wound_reroll = wound_reroll
         self.twin_linked = twin_linked

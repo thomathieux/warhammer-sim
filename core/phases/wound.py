@@ -90,19 +90,23 @@ class WoundPhase(Phase):
             )
 
             # --------------------------------------------------
-            # 2. Modificateur anticipé (capacité défensive)
-            #    -1 wound si :
-            #      - la capacité est active
-            #      - F > E
+            # 2. Modificateur anticipé (capacités défensives)
+            #    Convention : modifier négatif = plus difficile à blesser
+            #      wound_minus_one_if_weaker : -1 si F > E (Armour of Contempt)
+            #      wound_modifier            : modificateur direct (leader ability)
             # --------------------------------------------------
             modifier = 0
             if (
                 defender.wound_minus_one_if_weaker
                 and model.strength > defender.model.toughness
             ):
-                modifier = -1
+                modifier -= 1
+            modifier += defender.wound_modifier
 
-            # Application du modificateur au seuil (cap 2+ / 6+)
+            # Cap ±1
+            modifier = max(-1, min(1, modifier))
+
+            # Application au seuil (cap 2+ / 6+)
             modified_threshold = min(
                 6,
                 max(2, base_threshold - modifier),
