@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
+import numpy as np
 
 from data.loader import load_all_units, list_factions
 from data.unit_builder import build_weapon_groups, build_defending_unit
@@ -327,6 +328,8 @@ _DA_GRID     = "#D8D0C0"
 _DA_TERRACOTTA = "#C47A5A"
 _DA_BLUE     = "#7A9EC4"
 _DA_GREEN    = "#7A9E7E"
+_DA_ROSE     = "#C4867A"
+_DA_SAND     = "#C4A87A"
 
 _CHART_BASE = dict(
     plot_bgcolor=_DA_BG2,
@@ -346,14 +349,33 @@ def make_damage_histogram(results, weapon_name):
     if not damages:
         return go.Figure()
     nbins = max(1, max(damages) - min(damages) + 1)
-    fig = px.histogram(
-        x=damages, nbins=nbins,
-        labels={"x": "Dégâts alloués", "y": "Fréquence"},
+    # KDE via noyau gaussien (numpy, sans scipy)
+    data = np.array(damages, dtype=float)
+    bw = max(1.06 * np.std(data) * len(data) ** (-0.2), 0.5)
+    x_kde = np.linspace(max(0.0, float(min(damages)) - 1), float(max(damages)) + 2, 200)
+    kde_y = np.zeros_like(x_kde)
+    for xi in data:
+        kde_y += np.exp(-0.5 * ((x_kde - xi) / bw) ** 2)
+    kde_y /= (len(data) * bw * np.sqrt(2 * np.pi))
+
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=damages, nbinsx=nbins, histnorm="probability density",
+        marker_color=_DA_TERRACOTTA, marker_line_color=_DA_INK, marker_line_width=0.6,
+        opacity=0.65, name="Distribution",
+    ))
+    fig.add_trace(go.Scatter(
+        x=x_kde, y=kde_y, mode="lines",
+        line=dict(color=_DA_INK, width=2),
+        name="KDE",
+    ))
+    fig.update_layout(
         title="Distribution des dégâts",
-        color_discrete_sequence=[_DA_TERRACOTTA],
+        xaxis_title="Dégâts alloués", yaxis_title="Densité",
+        showlegend=True, bargap=0.06,
+        legend=dict(font=dict(size=9), bgcolor="rgba(250,247,242,0.8)", x=0.68, y=0.95),
+        **_CHART_BASE,
     )
-    fig.update_traces(marker_line_color=_DA_INK, marker_line_width=0.8)
-    fig.update_layout(showlegend=False, bargap=0.06, **_CHART_BASE)
     return _apply_grid(fig)
 
 def make_kill_chart(results, weapon_name, max_models):
@@ -379,25 +401,219 @@ def make_kill_chart(results, weapon_name, max_models):
     )
     return _apply_grid(fig)
 
-def make_cumulative_chart(results, weapon_name):
-    damages = sorted([r.allocation.damage_allocated for r in results])
+def make_percentile_bands_chart(results):
+    damages = [r.allocation.damage_allocated for r in results]
+    if not damages:
+        return go.Figure()
+    max_d = max(damages)
+    x_vals = list(range(0, max_d + 2))
     n = len(damages)
-    x, y = [], []
-    for v in range(0, max(damages) + 2):
-        x.append(v)
-        y.append(sum(1 for d in damages if d >= v) / n * 100)
-    fig = go.Figure(go.Scatter(
-        x=x, y=y, mode="lines", fill="tozeroy",
+    surv = [sum(1 for d in damages if d >= v) / n * 100 for v in x_vals]
+
+    p10 = float(np.percentile(damages, 10))
+    p25 = float(np.percentile(damages, 25))
+    p75 = float(np.percentile(damages, 75))
+    p90 = float(np.percentile(damages, 90))
+    med = float(np.median(damages))
+
+    def _band(lo, hi, color, name):
+        xs = [v for v in x_vals if lo <= v <= hi]
+        ys = [surv[v] for v in xs]
+        if not xs:
+            return None
+        return go.Scatter(
+            x=xs + xs[::-1], y=ys + [0] * len(ys),
+            fill="toself", fillcolor=color,
+            line=dict(color="rgba(0,0,0,0)"),
+            name=name, showlegend=True,
+        )
+
+    fig = go.Figure()
+    b80 = _band(p10, p90, "rgba(122,158,126,0.18)", "P10–P90 (80%)")
+    b50 = _band(p25, p75, "rgba(122,158,126,0.42)", "P25–P75 (50%)")
+    if b80:
+        fig.add_trace(b80)
+    if b50:
+        fig.add_trace(b50)
+    fig.add_trace(go.Scatter(
+        x=x_vals, y=surv, mode="lines",
         line=dict(color=_DA_GREEN, width=2.5),
-        fillcolor=f"rgba(122,158,126,0.18)",
+        showlegend=False,
     ))
+    fig.add_vline(
+        x=med, line_dash="dot", line_color=_DA_TERRACOTTA, line_width=1.5,
+        annotation_text=f"Médiane : {med:.0f}",
+        annotation_position="top right",
+        annotation_font_size=9, annotation_font_color=_DA_INK,
+    )
     fig.update_layout(
-        title="P(dégâts ≥ X)",
+        title="P(dégâts >= X)",
         xaxis_title="Dégâts", yaxis_title="Probabilité (%)",
         yaxis_range=[0, 105],
-        showlegend=False, **_CHART_BASE,
+        legend=dict(font=dict(size=9), bgcolor="rgba(250,247,242,0.8)", x=0.55, y=0.95),
+        **_CHART_BASE,
     )
     return _apply_grid(fig)
+
+# ---------------------------------------------------------------------------
+# Helpers — rapport enrichi (gauge, narratif, funnel)
+# ---------------------------------------------------------------------------
+
+def compute_threat_score(destruction_rate: float, models_killed_mean: float, model_count: int) -> float:
+    kills_ratio = min(1.0, models_killed_mean / max(model_count, 1))
+    return min(1.0, 0.40 * destruction_rate + 0.60 * kills_ratio)
+
+
+def make_threat_gauge(score: float):
+    if score < 0.25:
+        bar_color, verdict = _DA_GREEN, "IMPACT LIMITÉ"
+    elif score < 0.50:
+        bar_color, verdict = _DA_SAND, "PRESSION MODÉRÉE"
+    elif score < 0.75:
+        bar_color, verdict = _DA_TERRACOTTA, "MENACE ÉLEVÉE"
+    else:
+        bar_color, verdict = _DA_ROSE, "MENACE CRITIQUE"
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=round(score * 100),
+        number=dict(
+            suffix="%",
+            font=dict(family="JetBrains Mono, monospace", size=30, color=bar_color),
+        ),
+        title=dict(
+            text=f"<b>{verdict}</b>",
+            font=dict(family="Cinzel, Georgia, serif", size=12, color=_DA_INK),
+        ),
+        gauge=dict(
+            axis=dict(range=[0, 100], tickwidth=1, tickcolor=_DA_INK, tickfont=dict(size=8)),
+            bar=dict(color=bar_color, thickness=0.22),
+            bgcolor=_DA_BG2,
+            borderwidth=1.5,
+            bordercolor=_DA_INK,
+            steps=[
+                dict(range=[0, 25],   color="rgba(122,158,126,0.22)"),
+                dict(range=[25, 50],  color="rgba(196,168,122,0.22)"),
+                dict(range=[50, 75],  color="rgba(196,122,90,0.22)"),
+                dict(range=[75, 100], color="rgba(196,134,122,0.22)"),
+            ],
+        ),
+    ))
+    fig.update_layout(
+        height=210,
+        margin=dict(t=55, l=15, r=15, b=5),
+        paper_bgcolor=_DA_BG,
+        font=dict(family="Cinzel, Georgia, serif", color=_DA_INK),
+    )
+    return fig
+
+
+def _narrative_math(alloc: dict, results: list, model_count: int) -> str:
+    dmg_vals = [r.allocation.damage_allocated for r in results]
+    p10 = int(np.percentile(dmg_vals, 10))
+    p90 = int(np.percentile(dmg_vals, 90))
+    mean_ = alloc["damage_allocated_mean"]
+    kills_mean = alloc["models_killed_mean"]
+    destr = sum(1 for r in results if r.allocation.models_killed >= model_count) / len(results)
+    return (
+        f"{mean_:.1f} dégâts en moyenne &nbsp;·&nbsp; "
+        f"80% des simulations entre {p10} et {p90} dégâts &nbsp;·&nbsp; "
+        f"{kills_mean:.1f}/{model_count} figurine(s) éliminée(s) &nbsp;·&nbsp; "
+        f"destruction totale : {destr * 100:.0f}%"
+    )
+
+
+def _narrative_flavor(
+    score: float, alloc: dict, weapon_name: str,
+    atk_unit_name: str, def_unit_name: str, model_count: int, results: list,
+) -> str:
+    kills_mean = alloc["models_killed_mean"]
+    destr = sum(1 for r in results if r.allocation.models_killed >= model_count) / len(results)
+    pct = destr * 100
+
+    if score >= 0.75:
+        return (
+            f"Le <em>{weapon_name}</em> des {atk_unit_name} s'avère implacable contre les {def_unit_name}. "
+            f"L'anéantissement total est accompli dans {pct:.0f} % des engagements — "
+            f"peu d'unités peuvent prétendre résister à une telle puissance de feu."
+        )
+    elif score >= 0.50:
+        return (
+            f"Sous le feu du <em>{weapon_name}</em>, les {def_unit_name} subissent des pertes sévères. "
+            f"En moyenne, {kills_mean:.1f} figurine(s) ne survivent pas à l'assaut. "
+            f"La destruction totale reste une issue probable dans {pct:.0f} % des cas."
+        )
+    elif score >= 0.25:
+        return (
+            f"Le <em>{weapon_name}</em> maintient les {def_unit_name} sous pression constante "
+            f"sans garantir leur anéantissement. La menace est réelle, mais les {def_unit_name} "
+            f"disposent de la résistance nécessaire pour absorber l'essentiel de l'assaut."
+        )
+    else:
+        return (
+            f"Face à la résistance des {def_unit_name}, le <em>{weapon_name}</em> "
+            f"peine à creuser des brèches décisives. "
+            f"Les {atk_unit_name} devront envisager un soutien supplémentaire "
+            f"pour emporter l'engagement."
+        )
+
+
+_S_NARR_MATH = (
+    "margin:8px 0 4px 0;padding:8px 14px 8px 12px;"
+    "background:#F0EBE0;border-left:3px solid #c8bfb0;border-radius:0 3px 3px 0;"
+)
+_S_NARR_FLAV = (
+    "margin:4px 0 14px 0;padding:8px 14px 8px 12px;"
+    "background:#F5EDE4;border-left:3px solid #C47A5A;border-radius:0 3px 3px 0;"
+)
+_S_MATH_TXT = (
+    "font-family:'JetBrains Mono',monospace;font-size:0.78rem;"
+    "color:#5a5a7a;line-height:1.65;display:block;"
+)
+_S_FLAV_TXT = (
+    "font-family:'Lora',Georgia,serif;font-size:0.88rem;"
+    "font-style:italic;color:#1a1a2e;line-height:1.7;display:block;"
+)
+
+
+def render_narrative_duo(text_math: str, text_flavor: str):
+    st.markdown(
+        f'<div style="{_S_NARR_MATH}"><span style="{_S_MATH_TXT}">{text_math}</span></div>'
+        f'<div style="{_S_NARR_FLAV}"><span style="{_S_FLAV_TXT}">{text_flavor}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def make_funnel_chart(agg: dict, results: list):
+    attacks_mean  = float(np.mean([r.hit.events_in for r in results]))
+    hits_mean     = agg["hit"]["hits_mean"]
+    wounds_mean   = agg["wound"]["wounds_mean"]
+    saves_failed  = agg["save"]["saves_failed_mean"]
+
+    labels = ["Attaques", "Touches", "Blessures", "Non\nsauveg."]
+    values = [attacks_mean, hits_mean, wounds_mean, saves_failed]
+    colors = [_DA_TERRACOTTA, _DA_SAND, _DA_GREEN, _DA_BLUE]
+    pcts   = [v / attacks_mean * 100 if attacks_mean > 0 else 0 for v in values]
+    texts  = [
+        f"{v:.1f}" if i == 0 else f"{v:.1f}<br>({p:.0f}%)"
+        for i, (v, p) in enumerate(zip(values, pcts))
+    ]
+
+    fig = go.Figure(go.Bar(
+        x=labels, y=values,
+        marker_color=colors, marker_line_color=_DA_INK, marker_line_width=0.8,
+        text=texts, textposition="outside",
+        textfont=dict(family="JetBrains Mono, monospace", size=10, color=_DA_INK),
+    ))
+    fig.update_layout(
+        title="Phases de combat",
+        yaxis_title="Moyenne / round",
+        showlegend=False,
+        yaxis=dict(range=[0, max(values) * 1.42]),
+        **_CHART_BASE,
+    )
+    return _apply_grid(fig)
+
 
 # ---------------------------------------------------------------------------
 # Section attaquant
@@ -748,7 +964,7 @@ if simulate_btn:
         agg = StatsAggregator(results).aggregate()
         alloc = agg["allocation"]
 
-        # Trouver l'arme pour l'icône
+        # En-tête arme
         _w = atk_cfg["unit"].get_weapon(weapon_name)
         _ico_name = get_weapon_icon(_w) if _w else "bolter"
         _ico_html = icon_img(_ico_name, size=28)
@@ -763,7 +979,11 @@ if simulate_btn:
             1 for r in results if r.allocation.models_killed >= initial_count
         ) / len(results)
         models_remaining_mean = max(0, initial_count - alloc["models_killed_mean"])
+        threat_score = compute_threat_score(
+            destruction_rate, alloc["models_killed_mean"], initial_count
+        )
 
+        # --- 6 métriques clés ---
         m1, m2, m3, m4, m5, m6 = st.columns(6)
         m1.metric("Dégâts moyens", f"{alloc['damage_allocated_mean']:.2f}")
         m2.metric("Figurines tuées (moy.)", f"{alloc['models_killed_mean']:.2f}")
@@ -778,15 +998,53 @@ if simulate_btn:
         if alloc.get("support_kill_rate", 0) > 0:
             st.info(f"Taux de mort du support : {alloc['support_kill_rate']*100:.1f}%")
 
-        gc1, gc2, gc3 = st.columns(3)
-        with gc1:
-            st.plotly_chart(make_damage_histogram(results, weapon_name), use_container_width=True)
-        with gc2:
-            st.plotly_chart(make_kill_chart(results, weapon_name, def_cfg["model_count"]), use_container_width=True)
-        with gc3:
-            st.plotly_chart(make_cumulative_chart(results, weapon_name), use_container_width=True)
+        # --- Gauge + Narratif ---
+        g_col, n_col = st.columns([1, 2])
+        with g_col:
+            st.plotly_chart(make_threat_gauge(threat_score), use_container_width=True)
+        with n_col:
+            atk_name = atk_cfg["unit"].name
+            def_name = def_cfg["unit"].name
+            text_math = _narrative_math(alloc, results, initial_count)
+            text_flav = _narrative_flavor(
+                threat_score, alloc, weapon_name, atk_name, def_name, initial_count, results
+            )
+            render_narrative_duo(text_math, text_flav)
 
-        with st.expander("Stats détaillées par phase"):
+        # --- Graphiques : 2x2 ---
+        row1_c1, row1_c2 = st.columns(2)
+        with row1_c1:
+            st.plotly_chart(make_funnel_chart(agg, results), use_container_width=True)
+            st.caption(
+                "À chaque phase, une partie des dés est perdue. "
+                "La chute la plus forte entre deux barres révèle votre principal frein — "
+                "c'est là qu'un bonus (relance, PA, modificateur) aurait le plus d'impact."
+            )
+        with row1_c2:
+            st.plotly_chart(make_damage_histogram(results, weapon_name), use_container_width=True)
+            st.caption(
+                "La courbe lissée (KDE) révèle la forme réelle de la distribution. "
+                "Une courbe étroite = résultats prévisibles. Large et étalée = forte variabilité, "
+                "les dés peuvent surprendre dans les deux sens."
+            )
+
+        row2_c1, row2_c2 = st.columns(2)
+        with row2_c1:
+            st.plotly_chart(make_kill_chart(results, weapon_name, def_cfg["model_count"]), use_container_width=True)
+            st.caption(
+                "Probabilité de tuer exactement N figurines en un round. "
+                "Un pic élevé à 0 signifie que cette arme peine régulièrement à traverser les défenses — "
+                "envisagez un profil avec plus de PA ou de dégâts."
+            )
+        with row2_c2:
+            st.plotly_chart(make_percentile_bands_chart(results), use_container_width=True)
+            st.caption(
+                "Zone sombre = résultat obtenu dans 1 combat sur 2 (P25–P75). "
+                "Zone claire = résultat obtenu dans 4 combats sur 5 (P10–P90). "
+                "La médiane est votre résultat le plus 'typique'."
+            )
+
+        with st.expander("Détails par phase"):
             hit = agg["hit"]
             wound = agg["wound"]
             save = agg["save"]
@@ -796,7 +1054,7 @@ if simulate_btn:
                 st.write(f"Touches : {hit['hits_mean']:.2f} ± {hit['hits_std']:.2f}")
                 st.write(f"Crits : {hit['critical_hits_mean']:.2f}")
                 st.write(f"Auto-blessures (Lethal) : {hit['auto_wounds_mean']:.2f}")
-                st.write(f"Sustained générés : {hit['sustained_hits_mean']:.2f}")
+                st.write(f"Sustained : {hit['sustained_hits_mean']:.2f}")
             with c2:
                 st.markdown("**Blessure**")
                 st.write(f"Blessures : {wound['wounds_mean']:.2f} ± {wound['wounds_std']:.2f}")
