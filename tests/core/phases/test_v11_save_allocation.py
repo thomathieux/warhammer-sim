@@ -18,7 +18,7 @@ from core.context import CombatContext
 from core.events import AttackEvent
 from core.enums import AttackState
 from units.profiles import AttackingModel, DefendingModel
-from units.attacking import AttackingUnit
+from units.attacking import WeaponGroup
 from units.defending import DefendingUnit
 from core.dice import FixedValue
 
@@ -32,7 +32,7 @@ def _attacker(ap=0, damage=1):
         attacks=FixedValue(1), attack_skill=3, strength=4,
         ap=ap, damage=FixedValue(damage),
     )
-    return AttackingUnit(model=model, model_count=1)
+    return WeaponGroup(model=model, model_count=1)
 
 
 def _bg(wounds=2, save=5, fnp=None):

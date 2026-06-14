@@ -6,13 +6,13 @@ Tests Rapid Fire et Blast dans AttackingUnit.total_attacks().
 import pytest
 from core.context import CombatContext
 from units.profiles import AttackingModel
-from units.attacking import AttackingUnit
+from units.attacking import WeaponGroup
 from core.dice import FixedValue, Dice
 
 
 def _unit(attacks=2, rapid_fire=0, blast=False, model_count=5):
     model = AttackingModel(attacks=FixedValue(attacks), attack_skill=3, strength=4)
-    return AttackingUnit(model=model, model_count=model_count,
+    return WeaponGroup(model=model, model_count=model_count,
                          rapid_fire=rapid_fire, blast=blast)
 
 

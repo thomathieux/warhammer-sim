@@ -1,12 +1,20 @@
 # -*- coding: utf-8 -*-
-import random
-from typing import Optional
+from __future__ import annotations
+from typing import List, Optional, Tuple
 
+from core.dice import parse_dice
 from core.enums import RerollType
 from units.profiles import AttackingModel
+from units.unit import Unit, ModelGroup
 
 
-class AttackingUnit:
+class WeaponGroup:
+    """
+    Groupe d'armes prêt pour le moteur de simulation.
+    Représente un ensemble de modèles attaquant avec la même arme.
+    (Anciennement nommé AttackingUnit dans le moteur de simulation.)
+    """
+
     def __init__(
         self,
         model: AttackingModel,
@@ -63,13 +71,7 @@ class AttackingUnit:
         self.twin_linked = twin_linked
 
     def total_attacks(self, context=None, defender_count: int = 0) -> int:
-        """
-        Calcule le nombre total d'attaques de l'unité.
-
-        Prend en compte :
-        - Blast  : +1 attaque/figurine si cible ≥ 6, +D3 si ≥ 11
-        - Rapid Fire N : +N attaques/figurine si dans la moitié de la portée
-        """
+        """Calcule le nombre total d'attaques (Blast + Rapid Fire inclus)."""
         total = 0
         for _ in range(self.model_count):
             attacks = self.model.attacks.roll()
@@ -81,3 +83,86 @@ class AttackingUnit:
             total += self.rapid_fire * self.model_count
 
         return total
+
+
+class AttackingUnit(Unit):
+    """
+    Unité en configuration d'attaque (vue haute-niveau d'une datacard).
+    Hérite de Unit et ajoute la sélection d'armes + modificateurs offensifs.
+    Génère des WeaponGroup pour le moteur de simulation via to_weapon_groups().
+    """
+
+    def __init__(
+        self,
+        name: str,
+        core_groups: List[ModelGroup],
+        weapons: Optional[List] = None,
+        keywords: Optional[List[str]] = None,
+        leader: Optional[Unit] = None,
+        support: Optional[Unit] = None,
+        # Config d'attaque
+        active_loadout: Optional[List[Tuple[str, int]]] = None,
+        hit_reroll: RerollType = RerollType.NONE,
+        wound_reroll: RerollType = RerollType.NONE,
+        hit_modifier: int = 0,
+    ):
+        super().__init__(name, core_groups, weapons, keywords, leader, support)
+        self.active_loadout: List[Tuple[str, int]] = active_loadout or []
+        self.hit_reroll = hit_reroll
+        self.wound_reroll = wound_reroll
+        self.hit_modifier = hit_modifier
+
+    def to_weapon_groups(self, context=None) -> List[WeaponGroup]:
+        """
+        Projette l'AttackingUnit en liste de WeaponGroup pour le moteur de simulation.
+        Applique le filtre combat_type (ranged / melee) si context est fourni.
+        """
+        combat_type = context.combat_type if context is not None else None
+        groups: List[WeaponGroup] = []
+
+        for weapon_name, model_count in self.active_loadout:
+            weapon = next(
+                (w for w in self.weapons if w.name.lower() == weapon_name.lower()),
+                None,
+            )
+            if weapon is None:
+                continue
+
+            is_melee = weapon.range.strip().lower() == "melee"
+            if combat_type == "ranged" and is_melee:
+                continue
+            if combat_type == "melee" and not is_melee:
+                continue
+
+            kw = weapon.keywords
+            effective_wound_reroll = self.wound_reroll
+            if kw.twin_linked and self.wound_reroll == RerollType.NONE:
+                effective_wound_reroll = RerollType.FAILED
+
+            groups.append(WeaponGroup(
+                model=AttackingModel(
+                    attacks=parse_dice(weapon.attacks),
+                    attack_skill=weapon.skill,
+                    strength=weapon.strength,
+                    ap=weapon.ap,
+                    damage=parse_dice(weapon.damage),
+                ),
+                model_count=model_count,
+                lethal_hits=kw.lethal_hits,
+                sustained_hits=kw.sustained_hits,
+                torrent=kw.torrent,
+                blast=kw.blast,
+                devastating_wounds=kw.devastating_wounds,
+                anti_keyword=kw.anti_keyword,
+                anti_threshold=kw.anti_threshold,
+                melta=kw.melta,
+                rapid_fire=kw.rapid_fire,
+                ignores_cover=kw.ignores_cover,
+                twin_linked=kw.twin_linked,
+                hit_modifier=self.hit_modifier,
+                hit_reroll=self.hit_reroll,
+                wound_reroll=effective_wound_reroll,
+                weapon_name=weapon.name,
+            ))
+
+        return groups

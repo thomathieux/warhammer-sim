@@ -13,7 +13,7 @@ from core.phases.allocation import AllocationPhase
 from core.events import AttackEvent
 from core.enums import AttackState
 from units.profiles import AttackingModel, DefendingModel
-from units.attacking import AttackingUnit
+from units.attacking import WeaponGroup
 from units.defending import DefendingUnit
 from core.dice import FixedValue
 
@@ -25,7 +25,7 @@ from core.dice import FixedValue
 def _attacker(damage=2):
     model = AttackingModel(attacks=FixedValue(1), attack_skill=3, strength=4,
                            ap=0, damage=FixedValue(damage))
-    return AttackingUnit(model=model, model_count=1)
+    return WeaponGroup(model=model, model_count=1)
 
 
 def _bodyguard_model(wounds=2, save=3, fnp=None):

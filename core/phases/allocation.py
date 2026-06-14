@@ -5,7 +5,6 @@ from core.enums import AttackState
 from core.events import AttackEvent
 from core.phases.base import Phase
 from stats.phase_stats import AllocationPhaseStats
-from units.profiles import DefendingModel
 
 
 def _apply_fnp(damage: int, wounds_before: int, fnp: int) -> Tuple[int, int]:
@@ -26,23 +25,16 @@ def _apply_fnp(damage: int, wounds_before: int, fnp: int) -> Tuple[int, int]:
     return effective, ignored
 
 
-def _passes_save(
-    save_roll: int,
-    model: DefendingModel,
-    attacker,
-    context,
-) -> bool:
+def _passes_save(save_roll: int, model, attacker, context) -> bool:
     """
     Re-évalue un jet de save contre le profil d'un personnage (V11).
 
     Utilisé quand un événement ayant échoué le save des gardes du corps
     atteint un personnage avec un meilleur profil de sauvegarde.
     Retourne True si le save PASSE (aucun dégât).
-
-    1 échoue toujours. 6 réussit toujours (capped par la logique du seuil).
     """
     if save_roll == 1:
-        return False  # auto-échec
+        return False
 
     cover_bonus = 0
     if context is not None and context.target_in_cover and not attacker.ignores_cover:
@@ -66,7 +58,7 @@ def _apply_damage_to_slot(
     stats: AllocationPhaseStats,
 ) -> Tuple[int, bool]:
     """
-    Applique les dégâts à un slot (garde ou personnage).
+    Applique les dégâts à un slot.
     Retourne (PV restants après dégâts, modèle est mort).
     """
     if fnp is not None:
@@ -90,19 +82,13 @@ class AllocationPhase(Phase):
         """
         Alloue les dégâts attaque par attaque à l'unité défensive.
 
-        Ordre d'allocation V11 (Garde du Corps) :
-          1. Gardes du corps  — absorbent les dice les plus bas (déjà triés)
-          2. Support          — 2e personnage, pris avant le leader
-          3. Leader           — personnage principal, dernier à recevoir des dégâts
-
-        Pour chaque personnage (support, leader) :
-          - Le jet de save est réévalué contre le propre profil du personnage.
-          - Si le save passe avec le profil du personnage → aucun dégât.
-          - Cela corrige le biais du V10 où tous les saves utilisaient
-            le profil des gardes du corps.
+        Ordre d'allocation V11 :
+          1. Groupes intra-card (core_groups[0] → core_groups[1] → ...)
+             — pas de re-évaluation save (même règles pour tous)
+          2. Support inter-card — re-évalue save avec son propre profil
+          3. Leader inter-card — re-évalue save avec son propre profil
         """
         stats = AllocationPhaseStats()
-
         defender = events[0].defender if events else None
 
         for event in events:
@@ -112,30 +98,36 @@ class AllocationPhase(Phase):
             defender = event.defender
 
             # ==================================================
-            # 1. Gardes du corps
+            # 1. Groupes intra-card (core_groups)
             # ==================================================
-            if defender.model_count > 0:
-                remaining, died = _apply_damage_to_slot(
-                    event.damage,
-                    defender.current_model_wounds,
-                    defender.model.fnp,
-                    stats,
-                )
-                defender.current_model_wounds = remaining
-
-                if died:
-                    stats.models_killed += 1
-                    defender.model_count -= 1
-                    defender.current_model_wounds = (
-                        defender.model.wounds if defender.model_count > 0 else 0
+            handled = False
+            for i, group in enumerate(defender.core_groups):
+                state = defender.group_states[i]
+                if state.count > 0:
+                    remaining, died = _apply_damage_to_slot(
+                        event.damage,
+                        state.current_wounds,
+                        group.profile.fnp,
+                        stats,
                     )
+                    state.current_wounds = remaining
+
+                    if died:
+                        stats.models_killed += 1
+                        state.count -= 1
+                        state.current_wounds = (
+                            group.profile.wounds if state.count > 0 else 0
+                        )
+                    handled = True
+                    break
+
+            if handled:
                 continue
 
             # ==================================================
-            # 2. Support (2e personnage, V11)
+            # 2. Support inter-card (re-évaluation save V11)
             # ==================================================
             if defender.support_alive:
-                # Re-évaluation save V11 : le support peut avoir un meilleur save
                 if (
                     not event.mortal_wound
                     and event.save_roll is not None
@@ -146,7 +138,7 @@ class AllocationPhase(Phase):
                         context,
                     )
                 ):
-                    continue  # save passe → aucun dégât au support
+                    continue
 
                 remaining, died = _apply_damage_to_slot(
                     event.damage,
@@ -163,10 +155,9 @@ class AllocationPhase(Phase):
                 continue
 
             # ==================================================
-            # 3. Leader (personnage principal, dernier, V11)
+            # 3. Leader inter-card (re-évaluation save V11)
             # ==================================================
             if defender.leader_alive:
-                # Re-évaluation save V11
                 if (
                     not event.mortal_wound
                     and event.save_roll is not None
@@ -177,7 +168,7 @@ class AllocationPhase(Phase):
                         context,
                     )
                 ):
-                    continue  # save passe → leader protégé
+                    continue
 
                 remaining, died = _apply_damage_to_slot(
                     event.damage,
@@ -196,13 +187,18 @@ class AllocationPhase(Phase):
         # Wounds restants (sur la figurine actuellement ciblée)
         # --------------------------------------------------
         if defender is not None:
-            if defender.model_count > 0:
-                stats.wounds_remaining = defender.current_model_wounds
-            elif defender.support_alive:
-                stats.wounds_remaining = defender.current_support_wounds
-            elif defender.leader_alive:
-                stats.wounds_remaining = defender.current_leader_wounds
+            # Premier groupe intra-card encore vivant
+            for i, group in enumerate(defender.core_groups):
+                state = defender.group_states[i]
+                if state.count > 0:
+                    stats.wounds_remaining = state.current_wounds
+                    break
             else:
-                stats.wounds_remaining = 0
+                if defender.support_alive:
+                    stats.wounds_remaining = defender.current_support_wounds
+                elif defender.leader_alive:
+                    stats.wounds_remaining = defender.current_leader_wounds
+                else:
+                    stats.wounds_remaining = 0
 
         return stats

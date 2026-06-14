@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 
 @dataclass
@@ -53,6 +53,7 @@ class WeaponProfile:
     ap: int              # valeur réelle : -1 pour AP -1, 0 pour AP 0
     damage: str          # brut : "1", "D3", "D6"
     keywords: ParsedKeywords = field(default_factory=ParsedKeywords)
+    quantity: int = 1  # nb d'exemplaires portés par l'unité (ex: 2 pour "2 hurricane bolters")
 
 
 @dataclass
@@ -81,6 +82,8 @@ class WahapediaUnit:
     max_models: int = 1
     costs: List[dict] = field(default_factory=list)      # [{description, cost}]
     keywords: List[str] = field(default_factory=list)
+    model_composition: List[Tuple[int, int, int]] = field(default_factory=list)
+    # [(model_index, min_count, max_count)] trié par max_count décroissant
 
     def get_weapon(self, name: str) -> Optional[WeaponProfile]:
         name_lower = name.lower()

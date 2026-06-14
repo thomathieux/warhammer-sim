@@ -11,7 +11,7 @@ from core.context import CombatContext
 from core.events import AttackEvent
 from core.enums import AttackState
 from units.profiles import AttackingModel, DefendingModel
-from units.attacking import AttackingUnit
+from units.attacking import WeaponGroup
 from units.defending import DefendingUnit
 from core.dice import FixedValue
 
@@ -19,7 +19,7 @@ from core.dice import FixedValue
 def _attacker(damage=1, melta=0):
     model = AttackingModel(attacks=FixedValue(1), attack_skill=3, strength=8,
                            ap=-4, damage=FixedValue(damage))
-    return AttackingUnit(model=model, model_count=1, melta=melta)
+    return WeaponGroup(model=model, model_count=1, melta=melta)
 
 
 def _defender():

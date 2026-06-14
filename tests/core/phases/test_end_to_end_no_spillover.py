@@ -26,7 +26,7 @@ def test_end_to_end_no_spillover(monkeypatch):
     # -------------------------------------------------
     from core.dice import FixedValue
     from units.profiles import AttackingModel
-    from units.attacking import AttackingUnit
+    from units.attacking import WeaponGroup
     from core.enums import RerollType
 
     attacking_model = AttackingModel(
@@ -37,7 +37,7 @@ def test_end_to_end_no_spillover(monkeypatch):
         damage=FixedValue(5),
     )
 
-    attacker = AttackingUnit(
+    attacker = WeaponGroup(
         model=attacking_model,
         model_count=1,
         hit_critical_on=6,

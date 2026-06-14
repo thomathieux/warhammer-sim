@@ -14,7 +14,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import pytest
 from core.dice import FixedValue
 from units.profiles import AttackingModel
-from units.attacking import AttackingUnit
+from units.attacking import WeaponGroup
 from core.enums import RerollType
 
 
@@ -27,7 +27,7 @@ def basic_attacking_unit():
         attack_skill=3,
         strength=4,
     )
-    return AttackingUnit(
+    return WeaponGroup(
         model=model,
         model_count=1,
         hit_critical_on=6,

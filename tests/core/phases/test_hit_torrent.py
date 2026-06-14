@@ -11,14 +11,14 @@ from core.phases.hit import HitPhase
 from core.events import AttackEvent
 from core.enums import AttackState
 from units.profiles import AttackingModel, DefendingModel
-from units.attacking import AttackingUnit
+from units.attacking import WeaponGroup
 from units.defending import DefendingUnit
 from core.dice import FixedValue
 
 
 def _make_torrent_attacker(model_count=1, lethal_hits=False, sustained_hits=0):
     model = AttackingModel(attacks=FixedValue(3), attack_skill=4, strength=3, ap=0, damage=FixedValue(1))
-    return AttackingUnit(model=model, model_count=model_count, torrent=True,
+    return WeaponGroup(model=model, model_count=model_count, torrent=True,
                          lethal_hits=lethal_hits, sustained_hits=sustained_hits)
 
 
@@ -85,7 +85,7 @@ def test_torrent_coexists_with_normal_attacks(monkeypatch):
 
     # BS 6+ (très mauvais) mais Torrent → tout touche
     model = AttackingModel(attacks=FixedValue(2), attack_skill=6, strength=3)
-    attacker = AttackingUnit(model=model, model_count=3, torrent=True)
+    attacker = WeaponGroup(model=model, model_count=3, torrent=True)
     defender = _make_defender()
     events = _events(attacker, defender, 6)
 

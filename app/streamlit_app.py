@@ -302,9 +302,16 @@ def weapon_datacard_html(weapon) -> str:
         + _stat("D", weapon.damage)
     )
     kw_block = f'<div style="margin-top:4px">{kw_html}</div>' if kw_html else ""
+    qty = getattr(weapon, "quantity", 1)
+    qty_badge = (
+        f' <span style="background:#C47A5A;color:#fff;border-radius:3px;'
+        f'padding:1px 6px;font-size:0.72rem;font-family:\'JetBrains Mono\',monospace;">'
+        f'×{qty}</span>'
+        if qty > 1 else ""
+    )
     return (
         f'<div style="{_S_CARD}">'
-        f'<div style="{_S_TITLE}">{ico}{weapon.name}</div>'
+        f'<div style="{_S_TITLE}">{ico}{weapon.name}{qty_badge}</div>'
         f'<div style="{_S_ROW}">{stats}</div>'
         f'{kw_block}'
         f'</div>'
@@ -642,37 +649,24 @@ def render_attacker_section(factions):
         key="atk_weapons",
     )
 
-    _atk_default = atk_unit.max_models if atk_unit.max_models > 1 else 5
+    _atk_default = atk_unit.max_models
     total_models = st.number_input(
         "Figurines dans l'unité",
         min_value=1, value=_atk_default, key=f"atk_total_count_{atk_unit_name}",
     )
 
     weapon_dist = {}
-    assigned = 0
     for wname in selected_weapons:
         weapon = atk_unit.get_weapon(wname)
         if weapon:
             st.markdown(weapon_datacard_html(weapon), unsafe_allow_html=True)
-        remaining = int(total_models) - assigned
         count = st.number_input(
             f"Figurines avec **{wname}**",
             min_value=0, max_value=int(total_models),
-            value=min(remaining, int(total_models)),
+            value=int(total_models),
             key=f"wdist_{wname}",
         )
         weapon_dist[wname] = int(count)
-        assigned += int(count)
-
-    # Compteur total (indicatif uniquement)
-    if selected_weapons:
-        ok = assigned == int(total_models)
-        color = "#7A9E7E" if ok else "#C47A5A"
-        st.markdown(
-            f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:0.8rem;color:{color}">'
-            f'{assigned} / {int(total_models)} figurines assignées</span>',
-            unsafe_allow_html=True,
-        )
 
     # --- Relances ---
     with st.expander("Relances"):
@@ -751,15 +745,31 @@ def render_defender_section(factions):
 
     def_unit_name = st.selectbox("Unité", list(def_units.keys()), key="def_unit")
     def_unit = def_units[def_unit_name]
-    dm = def_unit.primary_model()
-    if dm:
-        st.markdown(unit_datacard_html(def_unit, dm), unsafe_allow_html=True)
 
-    def_model_count = st.number_input(
-        "Nombre de figurines",
-        min_value=1, max_value=max(def_unit.max_models, 1),
-        value=max(def_unit.max_models, 1), key=f"def_count_{def_unit_name}",
-    )
+    group_counts = None
+    if len(getattr(def_unit, "model_composition", [])) > 1:
+        st.info("Composition intégrée — plusieurs types de figurines sur la même fiche.")
+        group_counts = []
+        for model_idx, _min_c, max_c in getattr(def_unit, "model_composition", []):
+            if model_idx < len(def_unit.models):
+                m = def_unit.models[model_idx]
+                st.markdown(unit_datacard_html(def_unit, m), unsafe_allow_html=True)
+                cnt = st.number_input(
+                    f"Nombre de {m.name}",
+                    min_value=0, max_value=max_c,
+                    value=max_c, key=f"def_grp_{model_idx}_{def_unit_name}",
+                )
+                group_counts.append(int(cnt))
+        def_model_count = sum(group_counts)
+    else:
+        dm = def_unit.primary_model()
+        if dm:
+            st.markdown(unit_datacard_html(def_unit, dm), unsafe_allow_html=True)
+        def_model_count = st.number_input(
+            "Nombre de figurines",
+            min_value=1, max_value=max(def_unit.max_models, 1),
+            value=max(def_unit.max_models, 1), key=f"def_count_{def_unit_name}",
+        )
 
     # --- Leader attaché (défenseur) ---
     def_hit_modifier = 0
@@ -834,6 +844,7 @@ def render_defender_section(factions):
     return {
         "unit": def_unit,
         "model_count": int(def_model_count),
+        "group_counts": group_counts,
         "hit_modifier": def_hit_modifier,
         "wound_modifier": def_wound_modifier,
         "damage_reduction": def_damage_reduction,
@@ -902,7 +913,7 @@ if simulate_btn:
 
     # Unité principale
     loadout = [
-        (wname, count)
+        (wname, count * getattr(atk_cfg["unit"].get_weapon(wname), "quantity", 1))
         for wname, count in atk_cfg["weapon_dist"].items()
         if count > 0
     ]
@@ -940,6 +951,7 @@ if simulate_btn:
     defender = build_defending_unit(
         def_cfg["unit"],
         model_count=def_cfg["model_count"],
+        group_counts=def_cfg.get("group_counts"),
         leader_model=def_cfg["leader_model"],
         support_model=def_cfg["support_model"],
         hit_modifier=def_cfg["hit_modifier"],
