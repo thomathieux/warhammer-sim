@@ -12,8 +12,9 @@ from core.dice import FixedValue, Dice
 
 def _unit(attacks=2, rapid_fire=0, blast=False, model_count=5):
     model = AttackingModel(attacks=FixedValue(attacks), attack_skill=3, strength=4)
+    rf = FixedValue(rapid_fire) if rapid_fire else None
     return WeaponGroup(model=model, model_count=model_count,
-                         rapid_fire=rapid_fire, blast=blast)
+                         rapid_fire=rf, blast=blast)
 
 
 # ---------------------------------------------------------------------------
@@ -102,3 +103,60 @@ def test_blast_and_rapid_fire_stack():
     # Total arme : 2 fig × 4 = 8 + Rapid Fire 1×2 fig = 10
     total = unit.total_attacks(ctx, defender_count=10)
     assert total == 10
+
+
+# ---------------------------------------------------------------------------
+# Rapid Fire avec DiceExpression
+# ---------------------------------------------------------------------------
+
+def test_rapid_fire_none_no_bonus_at_half_range():
+    """
+    Objectif : rapid_fire=None signifie « pas de Rapid Fire ».
+    Même à mi-portée, aucun bonus n'est ajouté.
+    """
+    model = AttackingModel(attacks=FixedValue(2), attack_skill=3, strength=4)
+    unit = WeaponGroup(model=model, model_count=3, rapid_fire=None)
+    ctx = CombatContext(within_half_range=True)
+
+    assert unit.total_attacks(ctx) == 6  # 3 fig × 2 attaques, pas de RF
+
+
+def test_rapid_fire_dice_expr_d3_bounds():
+    """
+    Objectif : rapid_fire=parse_dice("d3") ajoute entre 1 et 3 attaques par
+    figurine à mi-portée. Sur 200 tirages avec 1 modèle / 2 attaques de base,
+    les totaux doivent être dans [3, 5].
+    """
+    from core.dice import parse_dice
+
+    model = AttackingModel(attacks=FixedValue(2), attack_skill=3, strength=4)
+    unit = WeaponGroup(model=model, model_count=1, rapid_fire=parse_dice("d3"))
+    ctx = CombatContext(within_half_range=True)
+
+    totals = [unit.total_attacks(ctx) for _ in range(200)]
+    assert min(totals) >= 3   # 2 base + 1 RF minimum
+    assert max(totals) <= 5   # 2 base + 3 RF maximum
+
+
+def test_keyword_parser_rapid_fire_d3_stores_str():
+    """
+    Objectif : parse_keywords("rapid fire d3") stocke la chaîne dé dans
+    rapid_fire_str et laisse rapid_fire (int) à 0.
+    """
+    from data.keyword_parser import parse_keywords
+
+    kw = parse_keywords("rapid fire d3")
+    assert kw.rapid_fire_str == "d3"
+    assert kw.rapid_fire == 0
+
+
+def test_keyword_parser_rapid_fire_d6plus3_stores_str():
+    """
+    Objectif : parse_keywords("rapid fire d6+3") capture l'expression
+    composée complète dans rapid_fire_str.
+    """
+    from data.keyword_parser import parse_keywords
+
+    kw = parse_keywords("rapid fire d6+3")
+    assert kw.rapid_fire_str == "d6+3"
+    assert kw.rapid_fire == 0

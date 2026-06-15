@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import List, Optional, Tuple
 
-from core.dice import parse_dice
+from core.dice import DiceExpression, FixedValue, parse_dice
 from core.enums import RerollType
 from units.profiles import AttackingModel
 from units.unit import Unit, ModelGroup
@@ -32,7 +32,7 @@ class WeaponGroup:
         anti_threshold: Optional[int] = None,
         # --- règles de dégâts ---
         melta: int = 0,
-        rapid_fire: int = 0,
+        rapid_fire: Optional[DiceExpression] = None,
         # --- règles de sauvegarde ---
         ignores_cover: bool = False,
         # --- modificateurs d'aura (leader abilities) ---
@@ -79,8 +79,9 @@ class WeaponGroup:
                 attacks += defender_count // 5
             total += attacks
 
-        if self.rapid_fire > 0 and context is not None and context.within_half_range:
-            total += self.rapid_fire * self.model_count
+        if self.rapid_fire is not None and context is not None and context.within_half_range:
+            for _ in range(self.model_count):
+                total += self.rapid_fire.roll()
 
         return total
 
@@ -156,7 +157,11 @@ class AttackingUnit(Unit):
                 anti_keyword=kw.anti_keyword,
                 anti_threshold=kw.anti_threshold,
                 melta=kw.melta,
-                rapid_fire=kw.rapid_fire,
+                rapid_fire=(
+                    parse_dice(kw.rapid_fire_str) if kw.rapid_fire_str
+                    else FixedValue(kw.rapid_fire) if kw.rapid_fire
+                    else None
+                ),
                 ignores_cover=kw.ignores_cover,
                 twin_linked=kw.twin_linked,
                 hit_modifier=self.hit_modifier,

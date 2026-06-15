@@ -14,10 +14,11 @@ class ParsedKeywords:
     twin_linked: bool = False         # relance des blessures ratées (géré → wound_reroll)
 
     # Auto-touche
-    torrent: bool = False             # pas encore simulé
+    torrent: bool = False
 
     # Modificateurs de portée (non simulés — pas de tracking de portée)
     rapid_fire: int = 0
+    rapid_fire_str: str = ""   # non vide quand la valeur est un dé (ex: "d3", "d6+3")
     melta: int = 0
     assault: bool = False
     heavy: bool = False
@@ -25,8 +26,8 @@ class ParsedKeywords:
     indirect_fire: bool = False
 
     # Autres effets de combat
-    blast: bool = False               # pas encore simulé
-    ignores_cover: bool = False       # pas encore simulé
+    blast: bool = False
+    ignores_cover: bool = False
     precision: bool = False           # pas encore simulé
     hazardous: bool = False           # pas encore simulé
     one_shot: bool = False            # pas encore simulé
@@ -36,7 +37,7 @@ class ParsedKeywords:
 
     # Anti-mot-clé (ex: anti-infantry 4+)
     anti_keyword: Optional[str] = None
-    anti_threshold: Optional[int] = None  # pas encore simulé
+    anti_threshold: Optional[int] = None
 
     # Mots-clés non reconnus (pour debug)
     unknown: List[str] = field(default_factory=list)

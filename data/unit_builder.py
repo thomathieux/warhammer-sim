@@ -7,7 +7,7 @@ Les mots-clés non encore simulés génèrent un message INFO.
 
 from typing import List, Optional, Tuple
 
-from core.dice import parse_dice
+from core.dice import DiceExpression, FixedValue, parse_dice
 from core.enums import RerollType
 from core.context import CombatContext
 from units.profiles import AttackingModel, DefendingModel
@@ -149,7 +149,11 @@ def build_weapon_groups(
             anti_keyword=kw.anti_keyword,
             anti_threshold=kw.anti_threshold,
             melta=kw.melta,
-            rapid_fire=kw.rapid_fire,
+            rapid_fire=(
+                parse_dice(kw.rapid_fire_str) if kw.rapid_fire_str
+                else FixedValue(kw.rapid_fire) if kw.rapid_fire
+                else None
+            ),
             ignores_cover=kw.ignores_cover,
             twin_linked=kw.twin_linked,
             hit_modifier=hit_modifier,

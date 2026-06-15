@@ -65,15 +65,32 @@ def test_twin_linked_ignored_on_auto_wound(monkeypatch, basic_attacking_unit):
     assert len(result) == 1
 
 def test_no_double_reroll_twin_linked_and_aura(monkeypatch, basic_attacking_unit):
+    """
+    Twin Linked + wound_reroll=FAILED : une seule relance doit être effectuée.
+    Dés = [1 (raté), 1 (relance, raté aussi)] → l'attaque échoue, pas de 2e relance.
+    """
     basic_attacking_unit.twin_linked = True
     basic_attacking_unit.wound_reroll = RerollType.FAILED
 
-    rolls = iter([1, 1])  # raté, relancé une fois, raté encore
+    rolls = iter([1, 1])  # raté → 1 relance → raté (pas de 2e relance)
+    monkeypatch.setattr("random.randint", lambda a, b: next(rolls))
 
-    def fake_randint(a, b):
-        return next(rolls)
+    from units.profiles import DefendingModel
+    from units.defending import DefendingUnit
+    from core.events import AttackEvent
+    from core.enums import AttackState
+    from core.phases.wound import WoundPhase
 
-    monkeypatch.setattr("random.randint", fake_randint)
+    defender = DefendingUnit(
+        DefendingModel(toughness=4, save=3, wounds=2),
+        model_count=1,
+    )
+    event = AttackEvent(basic_attacking_unit, defender)
+    event.state = AttackState.HIT_SUCCESS
 
-    # setup defender...
-    # assert qu'il n'y a qu'UNE relance
+    phase = WoundPhase()
+    result = phase.resolve([event])
+
+    # L'attaque échoue (2 dés = 1, aucun ne passe la blessure sur 4+)
+    assert len(result) == 0
+    # Si la 2e relance avait lieu, StopIteration serait levée (iter épuisé).

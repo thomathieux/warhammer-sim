@@ -70,7 +70,10 @@ def parse_keywords(description: str) -> ParsedKeywords:
         m = re.fullmatch(r"rapid fire (\d+|d\d+(?:\+\d+)?)", part)
         if m:
             val = m.group(1)
-            kw.rapid_fire = int(val) if val.isdigit() else 1
+            if val.isdigit():
+                kw.rapid_fire = int(val)
+            else:
+                kw.rapid_fire_str = val   # "d3", "d6", "d6+3" — résolu à l'exécution
             continue
 
         # --- melta N ---

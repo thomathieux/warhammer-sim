@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
+import streamlit.components.v1 as _st_components
 import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
@@ -872,6 +873,34 @@ st.markdown(
 
 factions = get_factions()
 
+# Défauts première utilisation — scénario Space Marines vs Orks
+_PLASMA_PISTOL = "Plasma pistol – standard"   # en-dash U+2013 depuis le CSV Wahapedia
+
+if "atk_faction" not in st.session_state:
+    # Attaquant : Assault Intercessor Squad (10 fig)
+    #   - 9 Assault Intercessors : Heavy bolt pistol + Astartes chainsword
+    #   - 1 Sergeant             : Plasma pistol + Power fist
+    if "Space Marines" in factions:
+        st.session_state["atk_faction"] = "Space Marines"
+    st.session_state["atk_unit"] = "Assault Intercessor Squad"
+    st.session_state["atk_weapons"] = [
+        "Heavy bolt pistol", "Astartes chainsword", _PLASMA_PISTOL, "Power fist"
+    ]
+    st.session_state["atk_total_count_Assault Intercessor Squad"] = 10
+    st.session_state["wdist_Heavy bolt pistol"] = 9
+    st.session_state["wdist_Astartes chainsword"] = 9
+    st.session_state[f"wdist_{_PLASMA_PISTOL}"] = 1
+    st.session_state["wdist_Power fist"] = 1
+
+    # Défenseur : Boyz (9 Boyz + 1 Boss Nob) + Warboss en leader
+    if "Orks" in factions:
+        st.session_state["def_faction"] = "Orks"
+    st.session_state["def_unit"] = "Boyz"
+    st.session_state["def_grp_0_Boyz"] = 9    # BOY
+    st.session_state["def_grp_1_Boyz"] = 1    # BOSS NOB
+    st.session_state["def_attach_leader"] = True
+    st.session_state["def_leader_name"] = "Warboss"
+
 col_atk, col_def, col_ctx = st.columns([1, 1, 1])
 
 with col_atk:
@@ -886,6 +915,7 @@ with col_ctx:
     within_half = st.checkbox("Dans la moitié de la portée (Rapid Fire, Melta)")
     target_cover = st.checkbox("Cible en couverture")
     charged = st.checkbox("Attaquant a chargé (Lance)")
+    st.caption("⚠️ Le mot-clé Lance (Force +1 si charge) n'est pas simulé.")
     st.divider()
     n_runs = st.select_slider(
         "Simulations Monte Carlo",
@@ -901,6 +931,13 @@ simulate_btn = st.button("▶ Simuler", type="primary", use_container_width=True
 # ---------------------------------------------------------------------------
 
 if simulate_btn:
+    _st_components.html(
+        "<script>setTimeout(function(){"
+        "var el=window.parent.document.querySelector('[data-testid=\"stMain\"]');"
+        "if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'});"
+        "},150);</script>",
+        height=0,
+    )
     context = CombatContext(
         combat_type="ranged" if combat_type == "Distance" else "melee",
         within_half_range=within_half,
@@ -995,15 +1032,20 @@ if simulate_btn:
             destruction_rate, alloc["models_killed_mean"], initial_count
         )
 
-        # --- 6 métriques clés ---
-        m1, m2, m3, m4, m5, m6 = st.columns(6)
-        m1.metric("Dégâts moyens", f"{alloc['damage_allocated_mean']:.2f}")
-        m2.metric("Figurines tuées (moy.)", f"{alloc['models_killed_mean']:.2f}")
-        m3.metric("Figurines restantes (moy.)", f"{models_remaining_mean:.2f}")
-        m4.metric("Taux de destruction", f"{destruction_rate*100:.1f}%",
-                  help="Probabilité d'éliminer toute l'unité en un round")
-        m5.metric("FNP ignorés", f"{alloc['fnp_ignored_damage_mean']:.2f}")
-        m6.metric("Spillover perdu", f"{alloc['spillover_damage_mean']:.2f}")
+        # --- Métriques clés (FNP / Spillover masqués si nuls) ---
+        _metrics = [
+            ("Dégâts moyens",            f"{alloc['damage_allocated_mean']:.2f}",  None),
+            ("Figurines tuées (moy.)",   f"{alloc['models_killed_mean']:.2f}",     None),
+            ("Figurines restantes (moy.)",f"{models_remaining_mean:.2f}",           None),
+            ("Taux de destruction",      f"{destruction_rate*100:.1f}%",
+             "Probabilité d'éliminer toute l'unité en un round"),
+        ]
+        if alloc["fnp_ignored_damage_mean"] > 0:
+            _metrics.append(("FNP ignorés", f"{alloc['fnp_ignored_damage_mean']:.2f}", None))
+        if alloc["spillover_damage_mean"] > 0:
+            _metrics.append(("Spillover perdu", f"{alloc['spillover_damage_mean']:.2f}", None))
+        for _col, (_label, _val, _help) in zip(st.columns(len(_metrics)), _metrics):
+            _col.metric(_label, _val, help=_help)
 
         if alloc.get("leader_kill_rate", 0) > 0:
             st.info(f"Taux de mort du leader : {alloc['leader_kill_rate']*100:.1f}%")

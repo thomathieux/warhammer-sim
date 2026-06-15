@@ -17,4 +17,9 @@ venv/
 
 # Fichiers temporaires Windows
 Thumbs.db
+
+# Dossiers locaux (non versionnés)
+screenshots/
+reports/
 *.docx
+*.png
