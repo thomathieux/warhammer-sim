@@ -669,6 +669,11 @@ def render_attacker_section(factions):
         )
         weapon_dist[wname] = int(count)
 
+    atk_pts = st.number_input(
+        "Coût de l'unité (pts)", min_value=0, value=0, step=5, key="atk_pts",
+        help="Laissez à 0 pour ignorer le calcul d'efficacité points",
+    )
+
     # --- Relances ---
     with st.expander("Relances"):
         hit_rr = REROLL_OPTIONS[st.selectbox("Relance touche", list(REROLL_OPTIONS.keys()), key="hit_rr")]
@@ -731,6 +736,7 @@ def render_attacker_section(factions):
         "wound_rr": wound_rr,
         "hit_modifier": atk_hit_modifier,
         "leader_loadout": atk_leader_loadout,
+        "pts": int(atk_pts),
     }
 
 # ---------------------------------------------------------------------------
@@ -771,6 +777,11 @@ def render_defender_section(factions):
             min_value=1, max_value=max(def_unit.max_models, 1),
             value=max(def_unit.max_models, 1), key=f"def_count_{def_unit_name}",
         )
+
+    def_pts = st.number_input(
+        "Coût de l'unité (pts)", min_value=0, value=0, step=5, key="def_pts",
+        help="Laissez à 0 pour ignorer le calcul d'efficacité points",
+    )
 
     # --- Leader attaché (défenseur) ---
     def_hit_modifier = 0
@@ -852,7 +863,189 @@ def render_defender_section(factions):
         "fnp": def_fnp,
         "leader_model": leader_defending_model,
         "support_model": support_defending_model,
+        "pts": int(def_pts),
     }
+
+# ---------------------------------------------------------------------------
+# Sidebar — Listes d'armée
+# ---------------------------------------------------------------------------
+
+def render_army_list_sidebar(factions):
+    from army_list import parse_and_match
+
+    with st.sidebar:
+        st.markdown(
+            '<p style="font-family:\'Cinzel\',Georgia,serif;font-size:1rem;'
+            'font-weight:700;letter-spacing:0.06em;margin-bottom:8px">'
+            'Listes d\'armée</p>',
+            unsafe_allow_html=True,
+        )
+
+        uploaded_files = st.file_uploader(
+            "Fichiers JSON (BattleScribe)",
+            type=["json"],
+            accept_multiple_files=True,
+            key="army_list_files",
+            label_visibility="collapsed",
+        )
+
+        if not uploaded_files:
+            st.caption("Glissez un ou plusieurs fichiers JSON BattleScribe.")
+            return
+
+        # Recalcul uniquement si les fichiers ont changé
+        file_sig = frozenset((f.name, f.size) for f in uploaded_files)
+        if st.session_state.get("_army_lists_sig") != file_sig:
+            parsed = []
+            for f in uploaded_files:
+                try:
+                    f.seek(0)
+                    result = parse_and_match(f, factions, get_units_by_faction)
+                    parsed.append(result)
+                except Exception as exc:
+                    st.error(f"Erreur dans {f.name} : {exc}")
+            st.session_state["army_lists_matched"] = parsed
+            st.session_state["_army_lists_sig"] = file_sig
+
+        all_lists = st.session_state.get("army_lists_matched", [])
+
+        for li, roster in enumerate(all_lists):
+            label = f"{roster['roster_name']} — {roster['roster_pts']} pts"
+            with st.expander(label, expanded=(len(all_lists) == 1)):
+                for ui, matched in enumerate(roster["units"]):
+                    found = (
+                        matched["wahapedia_unit"] is not None
+                        and matched.get("wahapedia_faction") is not None
+                    )
+                    color = "#1a1a2e" if found else "#aaaaaa"
+                    n_weapons = len(matched.get("matched_weapons", []))
+                    weapon_hint = (
+                        f" · {n_weapons} arme{'s' if n_weapons > 1 else ''}"
+                        if found and n_weapons
+                        else ""
+                    )
+                    st.markdown(
+                        f'<div style="margin-bottom:2px">'
+                        f'<span style="font-size:0.8rem;color:{color}">'
+                        f'{matched["name"]}</span>'
+                        f'<span style="font-size:0.7rem;color:#8a8a9a"> — '
+                        f'{matched["pts"]} pts{weapon_hint}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                    b_atk, b_def = st.columns(2)
+                    with b_atk:
+                        if st.button(
+                            "ATK", key=f"atk_{li}_{ui}", disabled=not found,
+                            help="Charger en Attaquant",
+                            use_container_width=True,
+                        ):
+                            ss = st.session_state
+                            ss["atk_faction"] = matched["wahapedia_faction"]
+                            ss["atk_unit"] = matched["wahapedia_unit"].name
+                            ss["atk_pts"] = matched["pts"]
+                            ss["atk_weapons"] = matched.get("matched_weapons") or []
+                            ss["atk_attach_leader"] = False
+                            ss["atk_attach_support"] = False
+                    with b_def:
+                        if st.button(
+                            "DÉF", key=f"def_{li}_{ui}", disabled=not found,
+                            help="Charger en Défenseur",
+                            use_container_width=True,
+                        ):
+                            ss = st.session_state
+                            ss["def_faction"] = matched["wahapedia_faction"]
+                            ss["def_unit"] = matched["wahapedia_unit"].name
+                            ss["def_pts"] = matched["pts"]
+                            ss["def_attach_leader"] = False
+                            ss["def_attach_support"] = False
+                    if ui < len(roster["units"]) - 1:
+                        st.markdown(
+                            '<hr style="margin:4px 0;border-color:#e8e0d0;opacity:0.5">',
+                            unsafe_allow_html=True,
+                        )
+
+
+# ---------------------------------------------------------------------------
+# Sidebar — Profils sauvegardés
+# ---------------------------------------------------------------------------
+
+def render_profiles_sidebar():
+    from streamlit_javascript import st_javascript
+    from profiles import extract_profile, restore_profile, deserialize_profiles, js_read, js_write, MAX_PROFILES
+
+    # Lecture localStorage (retourne 0 sur le premier rendu, puis la valeur réelle)
+    raw = st_javascript(js_read(), key="wh40k_read_profiles")
+    profiles = deserialize_profiles(raw)
+
+    # Écriture en attente posée lors d'un save/delete
+    if "_profiles_to_write" in st.session_state:
+        pending = st.session_state.pop("_profiles_to_write")
+        st_javascript(js_write(pending), key="wh40k_write_profiles")
+
+    with st.sidebar:
+        st.markdown(
+            '<p style="font-family:\'Cinzel\',Georgia,serif;font-size:1rem;'
+            'font-weight:700;letter-spacing:0.06em;margin-bottom:8px">'
+            'Profils sauvegardés</p>',
+            unsafe_allow_html=True,
+        )
+
+        col_name, col_btn = st.columns([3, 1])
+        with col_name:
+            profile_name = st.text_input(
+                "Nom", placeholder="Nom du profil",
+                key="profile_name_input", label_visibility="collapsed",
+            )
+        with col_btn:
+            save_clicked = st.button("💾", help="Sauvegarder la configuration actuelle")
+
+        if save_clicked:
+            name = profile_name.strip()
+            if not name:
+                st.sidebar.error("Saisissez un nom.")
+            elif len(name) > 40:
+                st.sidebar.error("Nom trop long (max 40 caractères).")
+            else:
+                new_profile = extract_profile(name)
+                updated = [p for p in profiles if p.get("name") != name]
+                updated.insert(0, new_profile)
+                if len(updated) > MAX_PROFILES:
+                    updated = updated[:MAX_PROFILES]
+                    st.sidebar.warning(f"Limite de {MAX_PROFILES} profils atteinte.")
+                st.session_state["_profiles_to_write"] = updated
+                st.rerun()
+
+        if not profiles:
+            st.sidebar.caption("Aucun profil sauvegardé.")
+        else:
+            st.sidebar.markdown(
+                f'<p style="font-size:0.75rem;color:#8a8a9a;margin:4px 0 8px">'
+                f'{len(profiles)} profil(s)</p>',
+                unsafe_allow_html=True,
+            )
+            for i, p in enumerate(profiles):
+                c_name, c_load, c_del = st.sidebar.columns([4, 1, 1])
+                with c_name:
+                    ts = p.get("created_at", "")[:10]
+                    st.markdown(
+                        f'<span style="font-size:0.85rem;font-weight:600">{p["name"]}</span>'
+                        f'<br><span style="font-size:0.7rem;color:#8a8a9a">{ts}</span>',
+                        unsafe_allow_html=True,
+                    )
+                with c_load:
+                    if st.button("↩", key=f"load_profile_{i}", help="Charger ce profil"):
+                        try:
+                            restore_profile(p)
+                        except ValueError:
+                            st.sidebar.error("Profil incompatible (version ancienne).")
+                        else:
+                            st.rerun()
+                with c_del:
+                    if st.button("🗑", key=f"del_profile_{i}", help="Supprimer ce profil"):
+                        updated = [q for j, q in enumerate(profiles) if j != i]
+                        st.session_state["_profiles_to_write"] = updated
+                        st.rerun()
+
 
 # ---------------------------------------------------------------------------
 # Interface principale
@@ -872,6 +1065,10 @@ st.markdown(
 )
 
 factions = get_factions()
+render_profiles_sidebar()
+with st.sidebar:
+    st.sidebar.divider()
+render_army_list_sidebar(factions)
 
 # Défauts première utilisation — scénario Space Marines vs Orks
 _PLASMA_PISTOL = "Plasma pistol – standard"   # en-dash U+2013 depuis le CSV Wahapedia
@@ -911,16 +1108,17 @@ with col_def:
 
 with col_ctx:
     section_header("context", "Contexte")
-    combat_type = st.radio("Type de combat", ["Distance", "Mêlée"], horizontal=True)
-    within_half = st.checkbox("Dans la moitié de la portée (Rapid Fire, Melta)")
-    target_cover = st.checkbox("Cible en couverture")
-    charged = st.checkbox("Attaquant a chargé (Lance)")
+    combat_type = st.radio("Type de combat", ["Distance", "Mêlée"], horizontal=True, key="combat_type")
+    within_half = st.checkbox("Dans la moitié de la portée (Rapid Fire, Melta)", key="within_half")
+    target_cover = st.checkbox("Cible en couverture", key="target_cover")
+    charged = st.checkbox("Attaquant a chargé (Lance)", key="charged")
     st.caption("⚠️ Le mot-clé Lance (Force +1 si charge) n'est pas simulé.")
     st.divider()
     n_runs = st.select_slider(
         "Simulations Monte Carlo",
         options=[500, 1000, 2000, 5000, 10000],
         value=2000,
+        key="n_runs",
     )
 
 st.divider()
@@ -1051,6 +1249,40 @@ if simulate_btn:
             st.info(f"Taux de mort du leader : {alloc['leader_kill_rate']*100:.1f}%")
         if alloc.get("support_kill_rate", 0) > 0:
             st.info(f"Taux de mort du support : {alloc['support_kill_rate']*100:.1f}%")
+
+        # --- Efficacité points ---
+        _eff_metrics = []
+        _dmg = alloc["damage_allocated_mean"]
+        _kills = alloc["models_killed_mean"]
+        _atk_pts = atk_cfg.get("pts", 0)
+        _def_pts = def_cfg.get("pts", 0)
+        if _atk_pts > 0:
+            _eff_metrics.append((
+                "Dégâts / 100 pts ATK",
+                f"{_dmg / _atk_pts * 100:.1f}",
+                "Dégâts moyens infligés pour 100 pts investis en attaque",
+            ))
+        if _def_pts > 0:
+            _eff_metrics.append((
+                "Dégâts / 100 pts DÉF",
+                f"{_dmg / _def_pts * 100:.1f}",
+                "Dégâts moyens infligés pour 100 pts de la cible — mesure si l'attaque 'vaut le coup'",
+            ))
+        if _atk_pts > 0 and _def_pts > 0:
+            _ratio = _dmg / _atk_pts * _def_pts
+            _eff_metrics.append((
+                "Ratio valeur ATK/DÉF",
+                f"{_ratio:.2f}×",
+                "Rapport dégâts/pts ATK rapporté au coût DÉF. >1 = l'attaquant est rentable, <1 = le défenseur résiste bien",
+            ))
+        if _eff_metrics:
+            st.markdown(
+                '<p style="font-size:0.8rem;letter-spacing:0.08em;color:#8a8a9a;margin:12px 0 4px">'
+                'EFFICACITÉ POINTS</p>',
+                unsafe_allow_html=True,
+            )
+            for _col, (_label, _val, _help) in zip(st.columns(len(_eff_metrics)), _eff_metrics):
+                _col.metric(_label, _val, help=_help)
 
         # --- Gauge + Narratif ---
         g_col, n_col = st.columns([1, 2])

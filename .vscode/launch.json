@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "debugpy",
+            "request": "launch",
+            "name": "Streamlit App",
+            "module": "streamlit",
+            "args": [
+                "run",
+                "app/streamlit_app.py",
+                "--server.port=8501"
+            ],
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false
+        }
+    ]
+}
